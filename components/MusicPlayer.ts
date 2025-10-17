@@ -204,7 +204,7 @@ const MusicPlayer = () => {
   };
 
   // 格式化时间
-  const formatTime = (seconds) => {
+  const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return '0:00';
     
     const mins = Math.floor(seconds / 60);

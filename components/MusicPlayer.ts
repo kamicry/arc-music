@@ -75,8 +75,12 @@ const MusicPlayer = () => {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   
-  const soundRef = useRef(null);
-  const progressIntervalRef = useRef(null);
+  // 修复前（可能的样子）:
+// const soundRef = useRef(null);
+
+//修复后:
+  const soundRef = useRef<Howl | null>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentSong = musicList[currentSongIndex];
 

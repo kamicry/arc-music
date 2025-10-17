@@ -180,15 +180,15 @@ const MusicPlayer = () => {
   };
 
   // 选择播放列表中的歌曲
-  const playSong = (index) => {
-    if (soundRef.current) {
-      soundRef.current.unload();
-    }
-    setCurrentSongIndex(index);
-    setProgress(0);
-    setCurrentTime(0);
-    setIsPlaying(true);
-  };
+  const playSong = (index: number) => {
+  if (soundRef.current) {
+    soundRef.current.unload();
+  }
+  setCurrentSongIndex(index);
+  setProgress(0);
+  setCurrentTime(0);
+  setIsPlaying(true);
+};
 
   // 进度条点击跳转
   const handleProgressClick = (e) => {

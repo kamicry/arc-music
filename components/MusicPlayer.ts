@@ -191,7 +191,7 @@ const MusicPlayer = () => {
 };
 
   // 进度条点击跳转
-  const handleProgressClick = (e) => {
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!soundRef.current) return;
     
     const progressBar = e.currentTarget;

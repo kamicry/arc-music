@@ -11,7 +11,7 @@
     "next": "14.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "howler": "^2.2.4",
+    "@types/howler": "^2.2.4",
     "lucide-react": "^0.263.1",
     "clsx": "^2.0.0"
   },

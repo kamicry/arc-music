@@ -106,7 +106,9 @@ const MusicPlayer = () => {
         playNext();
       },
       onload: () => {
-        setDuration(soundRef.current.duration());
+  if (soundRef.current) {
+    setDuration(soundRef.current.duration());
+  }
       }
     });
 

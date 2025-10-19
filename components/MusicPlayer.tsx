@@ -2,66 +2,18 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  Heart,
-  Share,
-  Repeat,
-  Shuffle,
-} from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle } from 'lucide-react';
 
-// 音乐数据
-const musicList = [
-  {
-    id: 1,
-    name: '光るなら',
-    artist: 'Goose house',
-    album: 'FLY HIGH!',
-    duration: '4:15',
-    url: '/music/song1.mp3',
-    cover: '/covers/cover1.jpg',
-  },
-  {
-    id: 2,
-    name: 'Butter-Fly',
-    artist: '和田光司',
-    album: 'デジモンアドベンチャー',
-    duration: '4:12',
-    url: '/music/song2.mp3',
-    cover: '/covers/cover2.jpg',
-  },
-  {
-    id: 3,
-    name: 'Blue Bird',
-    artist: 'いきものがかり',
-    album: 'My song Your song',
-    duration: '3:35',
-    url: '/music/song3.mp3',
-    cover: '/covers/cover3.jpg',
-  },
-  {
-    id: 4,
-    name: 'シリウス',
-    artist: '藍井エイル',
-    album: 'AUBE',
-    duration: '4:22',
-    url: '/music/song4.mp3',
-    cover: '/covers/cover4.jpg',
-  },
-  {
-    id: 5,
-    name: 'Crossing Field',
-    artist: 'LiSA',
-    album: 'LANDSPACE',
-    duration: '4:08',
-    url: '/music/song5.mp3',
-    cover: '/covers/cover5.jpg',
-  },
-];
+// 音乐数据从服务器获取
+export type Track = {
+  id: number;
+  name: string;
+  url: string;
+  artist?: string;
+  album?: string;
+  duration?: string;
+  cover?: string;
+};
 
 const MusicPlayer = () => {
   // 播放器状态
@@ -71,19 +23,39 @@ const MusicPlayer = () => {
   const [volume, setVolume] = useState(0.7);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [musicList, setMusicList] = useState<Track[]>([]);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoPlayRef = useRef(false);
 
   const currentSong = musicList[currentSongIndex];
 
+  // 加载服务器音乐列表
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/music');
+        if (!res.ok) return;
+        const data: Track[] = await res.json();
+        setMusicList(data);
+      } catch (e) {
+        // ignore
+      }
+    };
+    load();
+  }, []);
+
   // 初始化音频
   useEffect(() => {
+    if (!currentSong || !currentSong.url) return;
+
     if (soundRef.current) {
       soundRef.current.unload();
+      soundRef.current = null;
     }
 
-    soundRef.current = new Howl({
+    const howl = new Howl({
       src: [currentSong.url],
       html5: true,
       volume: volume,
@@ -99,19 +71,30 @@ const MusicPlayer = () => {
         playNext();
       },
       onload: () => {
-        if (soundRef.current) {
-          setDuration(soundRef.current.duration());
-        }
+        setDuration(howl.duration());
       },
     });
+
+    soundRef.current = howl;
+
+    if (autoPlayRef.current) {
+      try {
+        howl.play();
+      } catch {
+        // ignore
+      } finally {
+        autoPlayRef.current = false;
+      }
+    }
 
     return () => {
       if (soundRef.current) {
         soundRef.current.unload();
+        soundRef.current = null;
       }
       stopProgressTimer();
     };
-  }, [currentSong]);
+  }, [currentSong?.url]);
 
   // 更新音量
   useEffect(() => {
@@ -151,18 +134,22 @@ const MusicPlayer = () => {
   };
 
   const playNext = () => {
+    if (musicList.length === 0) return;
     if (soundRef.current) {
       soundRef.current.unload();
     }
+    autoPlayRef.current = true;
     setCurrentSongIndex((prevIndex) => (prevIndex === musicList.length - 1 ? 0 : prevIndex + 1));
     setProgress(0);
     setCurrentTime(0);
   };
 
   const playPrevious = () => {
+    if (musicList.length === 0) return;
     if (soundRef.current) {
       soundRef.current.unload();
     }
+    autoPlayRef.current = true;
     setCurrentSongIndex((prevIndex) => (prevIndex === 0 ? musicList.length - 1 : prevIndex - 1));
     setProgress(0);
     setCurrentTime(0);
@@ -170,13 +157,14 @@ const MusicPlayer = () => {
 
   // 选择播放列表中的歌曲
   const playSong = (index: number) => {
+    if (musicList.length === 0) return;
     if (soundRef.current) {
       soundRef.current.unload();
     }
+    autoPlayRef.current = true;
     setCurrentSongIndex(index);
     setProgress(0);
     setCurrentTime(0);
-    setIsPlaying(true);
   };
 
   // 进度条点击跳转
@@ -212,6 +200,9 @@ const MusicPlayer = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+          {musicList.length === 0 && (
+            <div className="text-slate-500">暂无音乐，请在服务器的 public/music 目录放入音频文件。</div>
+          )}
           {musicList.map((song, index) => (
             <div
               key={song.id}
@@ -280,8 +271,8 @@ const MusicPlayer = () => {
               )}
             </div>
             <div>
-              <p className="font-bold text-lg text-slate-900">{currentSong.name}</p>
-              <p className="text-slate-600">{currentSong.artist}</p>
+              <p className="font-bold text-lg text-slate-900">{currentSong?.name ?? '未选择'}</p>
+              <p className="text-slate-600">{currentSong?.artist ?? ''}</p>
             </div>
           </div>
 
@@ -301,14 +292,8 @@ const MusicPlayer = () => {
             {/* 专辑封面和歌曲信息 */}
             <div className="flex items-center justify-center mb-8 w-full">
               <div className="flex items-center space-x-6">
-                {/* 专辑封面 */}
-                <div
-                  className={`
-                    w-40 h-40 rounded-2xl overflow-hidden shadow-xl
-                    transition-transform duration-1000
-                    ${isPlaying ? 'animate-spin-slow' : ''}
-                  `}
-                >
+                {/* 专辑封面（不再旋转） */}
+                <div className="w-40 h-40 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
                   <div className="w-full h-full bg-gradient-to-br from-sky-400 via-blue-400 to-cyan-400 flex items-center justify-center">
                     <div className="text-white text-center">
                       <span className="text-lg font-semibold">专辑封面</span>
@@ -318,9 +303,9 @@ const MusicPlayer = () => {
 
                 {/* 歌曲信息 */}
                 <div className="text-left max-w-xs">
-                  <h2 className="text-2xl font-bold mb-2 text-slate-900">{currentSong.name}</h2>
-                  <p className="text-lg text-slate-700 mb-1">{currentSong.artist}</p>
-                  <p className="text-slate-500">{currentSong.album}</p>
+                  <h2 className="text-2xl font-bold mb-2 text-slate-900">{currentSong?.name ?? '未选择'}</h2>
+                  <p className="text-lg text-slate-700 mb-1">{currentSong?.artist ?? ''}</p>
+                  <p className="text-slate-500">{currentSong?.album ?? ''}</p>
                 </div>
               </div>
             </div>
@@ -328,10 +313,7 @@ const MusicPlayer = () => {
             {/* 进度条 */}
             <div className="w-full max-w-2xl mb-6">
               <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
-                <div
-                  className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative"
-                  style={{ width: `${progress}%` }}
-                >
+                <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
                   <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
                 </div>
               </div>
@@ -351,10 +333,7 @@ const MusicPlayer = () => {
                 <SkipBack size={24} />
               </button>
 
-              <button
-                onClick={togglePlayPause}
-                className="p-4 bg-gradient-to-r from-sky-400 to-blue-500 rounded-full hover:shadow-2xl transition-all duration-300 transform hover:scale-110 shadow-lg text-white"
-              >
+              <button onClick={togglePlayPause} className="p-4 bg-gradient-to-r from-sky-400 to-blue-500 rounded-full hover:shadow-2xl transition-all duration-300 transform hover:scale-110 shadow-lg text-white">
                 {isPlaying ? <Pause size={24} /> : <Play size={24} />}
               </button>
 
@@ -383,48 +362,6 @@ const MusicPlayer = () => {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes spin-slow {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .animate-spin-slow {
-          animation: spin-slow 20s linear infinite;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(0, 0, 0, 0.05);
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.2);
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 0, 0, 0.35);
-        }
-        .slider::-webkit-slider-thumb {
-          appearance: none;
-          height: 16px;
-          width: 16px;
-          border-radius: 50%;
-          background: linear-gradient(45deg, #38bdf8, #3b82f6);
-          cursor: pointer;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-        }
-        .slider::-moz-range-thumb {
-          height: 16px;
-          width: 16px;
-          border-radius: 50%;
-          background: linear-gradient(45deg, #38bdf8, #3b82f6);
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-        }
-      `}</style>
     </div>
   );
 };

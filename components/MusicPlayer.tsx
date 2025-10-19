@@ -630,121 +630,121 @@ const MusicPlayer = () => {
             </div>
           </div>
         </div>
-        {/* 移动端：底部小播放器与半屏展开 */}
-        {!mobileExpanded && (
-          <div className="md:hidden fixed bottom-0 left-0 right-0 h-20 z-30 bg-white/80 backdrop-blur border-t border-slate-200 flex items-center px-3">
-            <div className="flex items-center flex-1 min-w-0" onClick={() => setMobileExpanded(true)}>
+        {/* 移动端：底部小播放器与半屏展开（带动画） */}
+        <div
+          className={`md:hidden fixed bottom-0 left-0 right-0 h-20 z-30 bg-white/80 backdrop-blur border-t border-slate-200 flex items-center px-3 transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-full pointer-events-none' : 'translate-y-0'}`}
+        >
+          <div className="flex items-center flex-1 min-w-0" onClick={() => setMobileExpanded(true)}>
+            {coverNodeSmall}
+            <div className="min-w-0">
+              <p className="font-semibold text-slate-900 truncate">{currentSong?.name ?? '未选择'}</p>
+              <p className="text-sm text-slate-600 truncate">{currentSong?.artist ?? ''}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 pl-3">
+            <button onClick={(e) => { e.stopPropagation(); playPrevious(); }} className="p-2 text-slate-600 hover:text-slate-900">
+              <SkipBack size={20} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); togglePlayPause(); }} className="p-2 bg-gradient-to-r from-sky-400 to-blue-500 rounded-full text-white">
+              {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); playNext(); }} className="p-2 text-slate-600 hover:text-slate-900">
+              <SkipForward size={20} />
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setMobileExpanded(true); }} className="p-2 text-slate-600 hover:text-slate-900">
+              <ChevronUp size={20} />
+            </button>
+          </div>
+        </div>
+        <div
+          className={`md:hidden fixed inset-x-0 bottom-0 z-40 h-[50vh] bg-white/90 backdrop-blur rounded-t-2xl shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
+        >
+          <div className="flex items-center justify-between p-4 border-b border-slate-200/70">
+            <div className="flex items-center">
               {coverNodeSmall}
-              <div className="min-w-0">
-                <p className="font-semibold text-slate-900 truncate">{currentSong?.name ?? '未选择'}</p>
-                <p className="text-sm text-slate-600 truncate">{currentSong?.artist ?? ''}</p>
+              <div>
+                <p className="font-bold text-lg text-slate-900">{currentSong?.name ?? '未选择'}</p>
+                <p className="text-slate-600">{currentSong?.artist ?? ''}</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 pl-3">
-              <button onClick={(e) => { e.stopPropagation(); playPrevious(); }} className="p-2 text-slate-600 hover:text-slate-900">
-                <SkipBack size={20} />
+            <div className="flex items-center space-x-2 text-slate-600">
+              <button className="p-2 hover:text-slate-800 transition-colors">
+                <Heart size={20} />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); togglePlayPause(); }} className="p-2 bg-gradient-to-r from-sky-400 to-blue-500 rounded-full text-white">
-                {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+              <button
+                onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
+                className="p-2 hover:text-slate-800 transition-colors disabled:opacity-50"
+                disabled={!currentSong?.url}
+              >
+                <Share size={20} />
               </button>
-              <button onClick={(e) => { e.stopPropagation(); playNext(); }} className="p-2 text-slate-600 hover:text-slate-900">
-                <SkipForward size={20} />
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); setMobileExpanded(true); }} className="p-2 text-slate-600 hover:text-slate-900">
-                <ChevronUp size={20} />
+              <button onClick={() => setMobileExpanded(false)} className="p-2 hover:text-slate-800">
+                <ChevronDown size={20} />
               </button>
             </div>
           </div>
-        )}
-        {mobileExpanded && (
-          <div className="md:hidden fixed inset-x-0 bottom-0 z-30 h-[50vh] bg-white/90 backdrop-blur rounded-t-2xl shadow-2xl flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200/70">
-              <div className="flex items-center">
-                {coverNodeSmall}
-                <div>
-                  <p className="font-bold text-lg text-slate-900">{currentSong?.name ?? '未选择'}</p>
-                  <p className="text-slate-600">{currentSong?.artist ?? ''}</p>
+          <div className="flex-1 flex items-center justify-center p-4">
+            <div className="flex flex-col items-center w-full">
+              <div className="w-full mb-3">
+                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
+                  <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
+                    <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm text-slate-600 mt-2">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{formatTime(duration)}</span>
                 </div>
               </div>
-              <div className="flex items-center space-x-2 text-slate-600">
-                <button className="p-2 hover:text-slate-800 transition-colors">
-                  <Heart size={20} />
+              <div className="flex items-center justify-center space-x-6 mb-2">
+                <button onClick={() => {
+                  if (musicList.length === 0) return;
+                  if (soundRef.current) {
+                    soundRef.current.unload();
+                  }
+                  autoPlayRef.current = true;
+                  const prev = currentSongIndex;
+                  let idx = Math.floor(Math.random() * musicList.length);
+                  if (musicList.length > 1) {
+                    while (idx === prev) idx = Math.floor(Math.random() * musicList.length);
+                  }
+                  setCurrentSongIndex(idx);
+                  setProgress(0);
+                  setCurrentTime(0);
+                }} className="p-2 text-slate-600 hover:text-slate-900">
+                  <Shuffle size={20} />
+                </button>
+                <button onClick={playPrevious} className="p-2 text-slate-600 hover:text-slate-900">
+                  <SkipBack size={24} />
+                </button>
+                <button onClick={togglePlayPause} className="p-3 bg-gradient-to-r from-sky-400 to-blue-500 rounded-full text-white">
+                  {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+                </button>
+                <button onClick={playNext} className="p-2 text-slate-600 hover:text-slate-900">
+                  <SkipForward size={24} />
                 </button>
                 <button
-                  onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
-                  className="p-2 hover:text-slate-800 transition-colors disabled:opacity-50"
-                  disabled={!currentSong?.url}
+                  onClick={() => setPlaybackMode((m) => (m === 'order' ? 'single' : m === 'single' ? 'shuffle' : 'order'))}
+                  className={`p-2 ${playbackMode === 'order' ? 'text-slate-600 hover:text-slate-900' : 'text-sky-600 ring-1 ring-sky-400 rounded-full'}`}
                 >
-                  <Share size={20} />
-                </button>
-                <button onClick={() => setMobileExpanded(false)} className="p-2 hover:text-slate-800">
-                  <ChevronDown size={20} />
+                  {playbackMode === 'single' ? <Repeat1 size={20} /> : playbackMode === 'shuffle' ? <Shuffle size={20} /> : <Repeat size={20} />}
                 </button>
               </div>
-            </div>
-            <div className="flex-1 flex items-center justify-center p-4">
-              <div className="flex flex-col items-center w-full">
-                <div className="w-full mb-3">
-                  <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
-                    <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
-                      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
-                    </div>
-                  </div>
-                  <div className="flex justify-between text-sm text-slate-600 mt-2">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-center space-x-6 mb-2">
-                  <button onClick={() => {
-                    if (musicList.length === 0) return;
-                    if (soundRef.current) {
-                      soundRef.current.unload();
-                    }
-                    autoPlayRef.current = true;
-                    const prev = currentSongIndex;
-                    let idx = Math.floor(Math.random() * musicList.length);
-                    if (musicList.length > 1) {
-                      while (idx === prev) idx = Math.floor(Math.random() * musicList.length);
-                    }
-                    setCurrentSongIndex(idx);
-                    setProgress(0);
-                    setCurrentTime(0);
-                  }} className="p-2 text-slate-600 hover:text-slate-900">
-                    <Shuffle size={20} />
-                  </button>
-                  <button onClick={playPrevious} className="p-2 text-slate-600 hover:text-slate-900">
-                    <SkipBack size={24} />
-                  </button>
-                  <button onClick={togglePlayPause} className="p-3 bg-gradient-to-r from-sky-400 to-blue-500 rounded-full text-white">
-                    {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-                  </button>
-                  <button onClick={playNext} className="p-2 text-slate-600 hover:text-slate-900">
-                    <SkipForward size={24} />
-                  </button>
-                  <button
-                    onClick={() => setPlaybackMode((m) => (m === 'order' ? 'single' : m === 'single' ? 'shuffle' : 'order'))}
-                    className={`p-2 ${playbackMode === 'order' ? 'text-slate-600 hover:text-slate-900' : 'text-sky-600 ring-1 ring-sky-400 rounded-full'}`}
-                  >
-                    {playbackMode === 'single' ? <Repeat1 size={20} /> : playbackMode === 'shuffle' ? <Shuffle size={20} /> : <Repeat size={20} />}
-                  </button>
-                </div>
-                <div className="flex items-center justify-center space-x-3">
-                  <Volume2 size={20} className="text-slate-600" />
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={volume}
-                    onChange={(e) => setVolume(parseFloat(e.target.value))}
-                    className="w-32 h-1 bg-slate-300 rounded-full appearance-none cursor-pointer slider hover:bg-slate-400 transition-colors"
-                  />
-                </div>
+              <div className="flex items-center justify-center space-x-3">
+                <Volume2 size={20} className="text-slate-600" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="w-32 h-1 bg-slate-300 rounded-full appearance-none cursor-pointer slider hover:bg-slate-400 transition-colors"
+                />
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ export type Track = {
 
 const MusicPlayer = () => {
   // 播放器状态
-  const [currentSongIndex, setCurrentSongIndex] = useState(0);
+  const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(0.7);
@@ -278,7 +278,7 @@ const MusicPlayer = () => {
       soundRef.current.unload();
     }
     autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => (prevIndex === 0 ? musicList.length - 1 : prevIndex - 1));
+    setCurrentSongIndex((prevIndex) => (prevIndex <= 0 ? musicList.length - 1 : prevIndex - 1));
     setProgress(0);
     setCurrentTime(0);
   };
@@ -319,19 +319,14 @@ const MusicPlayer = () => {
 
   const coverNodeSmall = (
     <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
-      {coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+      {isPlaying ? (
+        <div className="flex space-x-1">
+          <div className="w-1 h-4 bg-white animate-pulse"></div>
+          <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+          <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+        </div>
       ) : (
-        isPlaying ? (
-          <div className="flex space-x-1">
-            <div className="w-1 h-4 bg-white animate-pulse"></div>
-            <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-            <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-          </div>
-        ) : (
-          <span className="text-sm font-bold text-white">▶</span>
-        )
+        <span className="text-sm font-bold text-white">▶</span>
       )}
     </div>
   );
@@ -401,10 +396,7 @@ const MusicPlayer = () => {
                 `}
               >
                 <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
-                  {index === currentSongIndex && coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
-                  ) : index === currentSongIndex && isPlaying ? (
+                  {index === currentSongIndex && isPlaying ? (
                     <div className="flex space-x-1">
                       <div className="w-1 h-3 bg-white animate-pulse"></div>
                       <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>

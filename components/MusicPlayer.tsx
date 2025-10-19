@@ -25,6 +25,8 @@ const MusicPlayer = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [musicList, setMusicList] = useState<Track[]>([]);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [allTracks, setAllTracks] = useState<Track[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -41,7 +43,9 @@ const MusicPlayer = () => {
         const res = await fetch('/api/music');
         if (!res.ok) return;
         const data: Track[] = await res.json();
+        setAllTracks(data);
         setMusicList(data);
+        setCurrentSongIndex(-1);
       } catch (e) {
         // ignore
       }
@@ -295,6 +299,31 @@ const MusicPlayer = () => {
     setCurrentTime(0);
   };
 
+  // 搜索并更新当前播放列表
+  const handleSearch = () => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      setMusicList(allTracks);
+    } else {
+      const filtered = allTracks.filter((t) =>
+        (t.name && t.name.toLowerCase().includes(term)) ||
+        (t.artist && t.artist.toLowerCase().includes(term)) ||
+        (t.album && t.album.toLowerCase().includes(term))
+      );
+      setMusicList(filtered);
+    }
+    if (soundRef.current) {
+      soundRef.current.unload();
+      soundRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentSongIndex(-1);
+    setCoverUrl(null);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+  };
+
   // 进度条点击跳转
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!soundRef.current) return;
@@ -372,8 +401,26 @@ const MusicPlayer = () => {
             </h1>
           </div>
 
+          <div className="p-4 md:p-6 border-b border-slate-200/60">
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="搜索歌曲/歌手/专辑"
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white/70 text-slate-800 placeholder-slate-500"
+              />
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md"
+              >
+                搜索
+              </button>
+            </div>
+          </div>
+
           {musicList.length === 0 && (
-            <div className="text-slate-600 text-sm">暂无音乐，请在服务器的 public/music 目录放入音频文件。</div>
+            <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
           )}
           {musicList.map((song, index) => (
             <div

@@ -684,16 +684,6 @@ const MusicPlayer = () => {
             </div>
             <div className="flex-1 flex items-center justify-center p-4">
               <div className="flex flex-col items-center w-full">
-                <div className="flex items-center justify-center mb-4 w-full">
-                  <div className="flex items-center space-x-4">
-                    {coverNodeLarge}
-                    <div className="text-left max-w-xs">
-                      <h2 className="text-xl font-bold mb-1 text-slate-900">{currentSong?.name ?? '未选择'}</h2>
-                      <p className="text-slate-700 mb-1">{currentSong?.artist ?? ''}</p>
-                      <p className="text-slate-500">{currentSong?.album ?? ''}</p>
-                    </div>
-                  </div>
-                </div>
                 <div className="w-full mb-3">
                   <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
                     <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>

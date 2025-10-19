@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1 } from 'lucide-react';
 
 // 音乐数据从服务器获取
 export type Track = {
@@ -17,7 +17,7 @@ export type Track = {
 
 const MusicPlayer = () => {
   // 播放器状态
-  const [currentSongIndex, setCurrentSongIndex] = useState(0);
+  const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(0.7);
@@ -25,12 +25,17 @@ const MusicPlayer = () => {
   const [currentTime, setCurrentTime] = useState(0);
   const [musicList, setMusicList] = useState<Track[]>([]);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [allTracks, setAllTracks] = useState<Track[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  type PlaybackMode = 'order' | 'single' | 'shuffle';
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('order');
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayRef = useRef(false);
   const latestCoverForUrlRef = useRef<string | null>(null);
   const coverObjectUrlRef = useRef<string | null>(null);
+  const playbackModeRef = useRef<PlaybackMode>('order');
 
   const currentSong = musicList[currentSongIndex];
 
@@ -41,7 +46,9 @@ const MusicPlayer = () => {
         const res = await fetch('/api/music');
         if (!res.ok) return;
         const data: Track[] = await res.json();
+        setAllTracks(data);
         setMusicList(data);
+        setCurrentSongIndex(-1);
       } catch (e) {
         // ignore
       }
@@ -71,6 +78,13 @@ const MusicPlayer = () => {
         stopProgressTimer();
       },
       onend: () => {
+        if (playbackModeRef.current === 'single') {
+          try {
+            howl.seek(0);
+            howl.play();
+          } catch {}
+          return;
+        }
         playNext();
       },
       onload: () => {
@@ -105,6 +119,11 @@ const MusicPlayer = () => {
       soundRef.current.volume(volume);
     }
   }, [volume]);
+
+  // 同步播放模式到 ref
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+  }, [playbackMode]);
 
   // 解析内嵌专辑封面
   useEffect(() => {
@@ -267,7 +286,19 @@ const MusicPlayer = () => {
       soundRef.current.unload();
     }
     autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => (prevIndex === musicList.length - 1 ? 0 : prevIndex + 1));
+    setCurrentSongIndex((prevIndex) => {
+      if (musicList.length === 0) return prevIndex;
+      if (playbackMode === 'shuffle') {
+        if (musicList.length === 1) return prevIndex >= 0 ? prevIndex : 0;
+        let next = prevIndex;
+        while (next === prevIndex) {
+          next = Math.floor(Math.random() * musicList.length);
+        }
+        return next;
+      }
+      const base = prevIndex < 0 ? 0 : prevIndex;
+      return base === musicList.length - 1 ? 0 : base + 1;
+    });
     setProgress(0);
     setCurrentTime(0);
   };
@@ -278,7 +309,19 @@ const MusicPlayer = () => {
       soundRef.current.unload();
     }
     autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => (prevIndex === 0 ? musicList.length - 1 : prevIndex - 1));
+    setCurrentSongIndex((prevIndex) => {
+      if (musicList.length === 0) return prevIndex;
+      if (playbackMode === 'shuffle') {
+        if (musicList.length === 1) return prevIndex >= 0 ? prevIndex : 0;
+        let next = prevIndex;
+        while (next === prevIndex) {
+          next = Math.floor(Math.random() * musicList.length);
+        }
+        return next;
+      }
+      const base = prevIndex < 0 ? 0 : prevIndex;
+      return base <= 0 ? musicList.length - 1 : base - 1;
+    });
     setProgress(0);
     setCurrentTime(0);
   };
@@ -293,6 +336,31 @@ const MusicPlayer = () => {
     setCurrentSongIndex(index);
     setProgress(0);
     setCurrentTime(0);
+  };
+
+  // 搜索并更新当前播放列表
+  const handleSearch = () => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      setMusicList(allTracks);
+    } else {
+      const filtered = allTracks.filter((t) =>
+        (t.name && t.name.toLowerCase().includes(term)) ||
+        (t.artist && t.artist.toLowerCase().includes(term)) ||
+        (t.album && t.album.toLowerCase().includes(term))
+      );
+      setMusicList(filtered);
+    }
+    if (soundRef.current) {
+      soundRef.current.unload();
+      soundRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentSongIndex(-1);
+    setCoverUrl(null);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
   };
 
   // 进度条点击跳转
@@ -319,19 +387,14 @@ const MusicPlayer = () => {
 
   const coverNodeSmall = (
     <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
-      {coverUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+      {isPlaying ? (
+        <div className="flex space-x-1">
+          <div className="w-1 h-4 bg-white animate-pulse"></div>
+          <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+          <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+        </div>
       ) : (
-        isPlaying ? (
-          <div className="flex space-x-1">
-            <div className="w-1 h-4 bg-white animate-pulse"></div>
-            <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-            <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-          </div>
-        ) : (
-          <span className="text-sm font-bold text-white">▶</span>
-        )
+        <span className="text-sm font-bold text-white">▶</span>
       )}
     </div>
   );
@@ -377,8 +440,27 @@ const MusicPlayer = () => {
             </h1>
           </div>
 
+          <div className="p-4 md:p-6 border-b border-slate-200/60">
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                placeholder="搜索歌曲/歌手/专辑"
+                className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white/70 text-slate-800 placeholder-slate-500"
+              />
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md"
+              >
+                搜索
+              </button>
+            </div>
+          </div>
+
           {musicList.length === 0 && (
-            <div className="text-slate-600 text-sm">暂无音乐，请在服务器的 public/music 目录放入音频文件。</div>
+            <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
           )}
           {musicList.map((song, index) => (
             <div
@@ -401,10 +483,7 @@ const MusicPlayer = () => {
                 `}
               >
                 <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
-                  {index === currentSongIndex && coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
-                  ) : index === currentSongIndex && isPlaying ? (
+                  {index === currentSongIndex && isPlaying ? (
                     <div className="flex space-x-1">
                       <div className="w-1 h-3 bg-white animate-pulse"></div>
                       <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
@@ -453,7 +532,11 @@ const MusicPlayer = () => {
               <button className="p-2 hover:text-slate-800 transition-colors">
                 <Heart size={20} />
               </button>
-              <button className="p-2 hover:text-slate-800 transition-colors">
+              <button
+                onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
+                className="p-2 hover:text-slate-800 transition-colors disabled:opacity-50"
+                disabled={!currentSong?.url}
+              >
                 <Share size={20} />
               </button>
             </div>
@@ -491,7 +574,22 @@ const MusicPlayer = () => {
 
               {/* 控制按钮 */}
               <div className="flex items-center justify-center space-x-6 mb-2 md:mb-6">
-                <button className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
+                <button onClick={() => {
+                  // 随机切换一首歌
+                  if (musicList.length === 0) return;
+                  if (soundRef.current) {
+                    soundRef.current.unload();
+                  }
+                  autoPlayRef.current = true;
+                  const prev = currentSongIndex;
+                  let idx = Math.floor(Math.random() * musicList.length);
+                  if (musicList.length > 1) {
+                    while (idx === prev) idx = Math.floor(Math.random() * musicList.length);
+                  }
+                  setCurrentSongIndex(idx);
+                  setProgress(0);
+                  setCurrentTime(0);
+                }} className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
                   <Shuffle size={20} />
                 </button>
 
@@ -507,8 +605,11 @@ const MusicPlayer = () => {
                   <SkipForward size={24} />
                 </button>
 
-                <button className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
-                  <Repeat size={20} />
+                <button
+                  onClick={() => setPlaybackMode((m) => (m === 'order' ? 'single' : m === 'single' ? 'shuffle' : 'order'))}
+                  className={`p-2 transition-all duration-300 transform hover:scale-110 ${playbackMode === 'order' ? 'text-slate-600 hover:text-slate-900' : 'text-sky-600 ring-1 ring-sky-400 rounded-full'}`}
+                >
+                  {playbackMode === 'single' ? <Repeat1 size={20} /> : playbackMode === 'shuffle' ? <Shuffle size={20} /> : <Repeat size={20} />}
                 </button>
               </div>
 

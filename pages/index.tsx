@@ -4,7 +4,7 @@ import MusicPlayer from '../components/MusicPlayer';
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-100 to-blue-100">
+    <div className="min-h-screen">
       <MusicPlayer />
     </div>
   );

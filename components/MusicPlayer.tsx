@@ -24,10 +24,13 @@ const MusicPlayer = () => {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [musicList, setMusicList] = useState<Track[]>([]);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayRef = useRef(false);
+  const latestCoverForUrlRef = useRef<string | null>(null);
+  const coverObjectUrlRef = useRef<string | null>(null);
 
   const currentSong = musicList[currentSongIndex];
 
@@ -102,6 +105,131 @@ const MusicPlayer = () => {
       soundRef.current.volume(volume);
     }
   }, [volume]);
+
+  // 解析内嵌专辑封面
+  useEffect(() => {
+    const url = currentSong?.url;
+    setCoverUrl(currentSong?.cover || null);
+    if (!url) return;
+
+    let aborted = false;
+    latestCoverForUrlRef.current = url;
+
+    const synchsafeToSize = (bytes: Uint8Array) => {
+      return (bytes[0] & 0x7f) * 0x200000 + (bytes[1] & 0x7f) * 0x4000 + (bytes[2] & 0x7f) * 0x80 + (bytes[3] & 0x7f);
+    };
+
+    const textDecoder = new TextDecoder('iso-8859-1');
+
+    const parseApic = (buf: ArrayBuffer) => {
+      const bytes = new Uint8Array(buf);
+      if (bytes.length < 10) return null as string | null;
+      if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
+      const ver = bytes[3];
+      const tagSize = synchsafeToSize(bytes.subarray(6, 10));
+      let offset = 10;
+      const end = 10 + tagSize;
+      while (offset + 10 <= bytes.length && offset + 10 <= end) {
+        // frame header
+        const id = textDecoder.decode(bytes.subarray(offset, offset + 4));
+        let frameSize = 0;
+        if (ver === 4) {
+          frameSize = synchsafeToSize(bytes.subarray(offset + 4, offset + 8));
+        } else {
+          frameSize =
+            (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
+        }
+        const frameStart = offset + 10;
+        if (frameSize <= 0) break;
+        if (id === 'APIC') {
+          const enc = bytes[frameStart];
+          let i = frameStart + 1;
+          // MIME type (latin1, null-terminated)
+          let mimeEnd = i;
+          while (mimeEnd < frameStart + frameSize && bytes[mimeEnd] !== 0x00) mimeEnd++;
+          const mime = textDecoder.decode(bytes.subarray(i, mimeEnd)) || 'image/jpeg';
+          i = mimeEnd + 1;
+          // picture type
+          i += 1;
+          // description (encoding dependent, null-terminated)
+          if (enc === 0x00 || enc === 0x03) {
+            while (i < frameStart + frameSize && bytes[i] !== 0x00) i++;
+            i += 1;
+          } else if (enc === 0x01 || enc === 0x02) {
+            // UTF-16 with BOM or without; terminate with 0x00 0x00
+            while (i + 1 < frameStart + frameSize) {
+              if (bytes[i] === 0x00 && bytes[i + 1] === 0x00) {
+                i += 2;
+                break;
+              }
+              i += 2;
+            }
+          }
+          const imgStart = i;
+          const imgEnd = Math.min(frameStart + frameSize, bytes.length);
+          const imgBytes = bytes.subarray(imgStart, imgEnd);
+          const blob = new Blob([imgBytes], { type: mime });
+          return URL.createObjectURL(blob);
+        }
+        offset = frameStart + frameSize;
+      }
+      return null as string | null;
+    };
+
+    const fetchCover = async () => {
+      try {
+        const headResp = await fetch(url, { headers: { Range: 'bytes=0-10240' }, cache: 'no-store' });
+        const headBuf = await headResp.arrayBuffer();
+        const headerBytes = new Uint8Array(headBuf);
+        if (headerBytes.length >= 10 && headerBytes[0] === 0x49 && headerBytes[1] === 0x44 && headerBytes[2] === 0x33) {
+          const size = synchsafeToSize(headerBytes.subarray(6, 10));
+          const total = 10 + size;
+          const rangeEnd = Math.max(10240, total);
+          const resp = await fetch(url, { headers: { Range: `bytes=0-${rangeEnd - 1}` }, cache: 'no-store' });
+          const buf = await resp.arrayBuffer();
+          if (aborted) return;
+          const cover = parseApic(buf);
+          if (!aborted && latestCoverForUrlRef.current === url) {
+            if (cover && cover.startsWith('blob:')) {
+              if (coverObjectUrlRef.current && coverObjectUrlRef.current !== cover) {
+                try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
+              }
+              coverObjectUrlRef.current = cover;
+            }
+            setCoverUrl(cover);
+          }
+        } else {
+          // Not ID3v2, try a larger chunk
+          const resp = await fetch(url, { cache: 'no-store' });
+          const buf = await resp.arrayBuffer();
+          if (aborted) return;
+          const cover = parseApic(buf);
+          if (!aborted && latestCoverForUrlRef.current === url) {
+            if (cover && cover.startsWith('blob:')) {
+              if (coverObjectUrlRef.current && coverObjectUrlRef.current !== cover) {
+                try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
+              }
+              coverObjectUrlRef.current = cover;
+            }
+            setCoverUrl(cover);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    setCoverUrl(currentSong?.cover || null);
+    fetchCover();
+
+    return () => {
+      aborted = true;
+      if (coverObjectUrlRef.current) {
+        try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
+        coverObjectUrlRef.current = null;
+      }
+    };
+  }, [currentSong?.url]);
 
   // 进度计时器
   const startProgressTimer = () => {
@@ -189,9 +317,42 @@ const MusicPlayer = () => {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const coverNodeSmall = (
+    <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
+      {coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+      ) : (
+        isPlaying ? (
+          <div className="flex space-x-1">
+            <div className="w-1 h-4 bg-white animate-pulse"></div>
+            <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+            <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+          </div>
+        ) : (
+          <span className="text-sm font-bold text-white">▶</span>
+        )
+      )}
+    </div>
+  );
+
+  const coverNodeLarge = (
+    <div className="w-40 h-40 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
+      {coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full bg-gradient-to-br from-sky-400 via-blue-400 to-cyan-400 flex items-center justify-center">
+          <div className="text-white text-center">
+            <span className="text-lg font-semibold">专辑封面</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="relative min-h-screen text-slate-800">
-      {/* 背景图层：读取 /bg 目录中的图片（默认 background.jpg），并添加模糊效果 */}
       <div className="absolute inset-0 -z-10">
         <div
           className="h-full w-full bg-center bg-cover scale-105 transform"
@@ -200,86 +361,88 @@ const MusicPlayer = () => {
         <div className="absolute inset-0 bg-white/50" />
       </div>
 
-      <div className="h-screen flex">
-        {/* 左侧：歌曲列表，占 2/3 */}
-        <div className="w-2/3 overflow-hidden flex flex-col border-r border-slate-200/70 bg-white/40 backdrop-blur-md">
-          <div className="p-6 border-b border-slate-200/70">
+      <div className="h-screen flex flex-col md:flex-row">
+        {/* 移动端：播放器固定顶部 1/3 屏高；桌面端：右侧 1/3 宽 */}
+        {/* 左侧/下方：歌曲列表 */}
+        <div
+          className={`
+            md:w-2/3 md:overflow-hidden md:flex md:flex-col md:border-r md:border-slate-200/70 md:bg-white/40
+            ${/* 移动端列表区域占剩余 2/3 屏高 */ ''}
+            mt-[33vh] h-[67vh] overflow-y-auto p-4 md:mt-0 md:h-auto
+          `}
+        >
+          <div className="p-6 border-b border-slate-200/70 hidden md:block">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
               我的音乐库
             </h1>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4">
-            {musicList.length === 0 && (
-              <div className="text-slate-600 text-sm">暂无音乐，请在服务器的 public/music 目录放入音频文件。</div>
-            )}
-            {musicList.map((song, index) => (
+          {musicList.length === 0 && (
+            <div className="text-slate-600 text-sm">暂无音乐，请在服务器的 public/music 目录放入音频文件。</div>
+          )}
+          {musicList.map((song, index) => (
+            <div
+              key={song.id}
+              className={`
+                group flex items-center p-4 rounded-2xl mb-3 cursor-pointer 
+                transition-all duration-300 transform hover:scale-[1.01]
+                ${index === currentSongIndex 
+                  ? 'bg-white/60 shadow-md' 
+                  : 'hover:bg-white/50'
+                }
+              `}
+              onClick={() => playSong(index)}
+            >
               <div
-                key={song.id}
                 className={`
-                  group flex items-center p-4 rounded-2xl mb-3 cursor-pointer 
-                  transition-all duration-300 transform hover:scale-[1.01]
-                  ${index === currentSongIndex 
-                    ? 'bg-white/60 shadow-md backdrop-blur-sm' 
-                    : 'hover:bg-white/50'
-                  }
+                  relative w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-4
+                  transition-all duration-300
+                  ${index === currentSongIndex ? 'shadow-md' : 'group-hover:shadow-sm'}
                 `}
-                onClick={() => playSong(index)}
               >
-                <div
-                  className={`
-                    relative w-12 h-12 rounded-lg flex items-center justify-center mr-4
-                    transition-all duration-300
-                    ${index === currentSongIndex ? 'shadow-md' : 'group-hover:shadow-sm'}
-                  `}
-                >
-                  <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center">
-                    {index === currentSongIndex && isPlaying ? (
-                      <div className="flex space-x-1">
-                        <div className="w-1 h-3 bg-white animate-pulse"></div>
-                        <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                        <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                      </div>
-                    ) : (
-                      <span className="text-xs font-bold text-white">{index + 1}</span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <p className={`font-semibold truncate ${index === currentSongIndex ? 'text-slate-900' : 'text-slate-700'}`}>
-                    {song.name}
-                  </p>
-                  <p className="text-sm text-slate-500 truncate">{song.artist ?? ''}</p>
-                </div>
-
-                <div className="flex items-center space-x-3">
-                  <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
-                    <Heart size={16} />
-                  </button>
-                  <span className="text-sm text-slate-500">{song.duration ?? ''}</span>
+                <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
+                  {index === currentSongIndex && coverUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+                  ) : index === currentSongIndex && isPlaying ? (
+                    <div className="flex space-x-1">
+                      <div className="w-1 h-3 bg-white animate-pulse"></div>
+                      <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                      <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-white">{index + 1}</span>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="flex-1 min-w-0">
+                <p className={`font-semibold truncate ${index === currentSongIndex ? 'text-slate-900' : 'text-slate-700'}`}>
+                  {song.name}
+                </p>
+                <p className="text-sm text-slate-500 truncate">{song.artist ?? ''}</p>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
+                  <Heart size={16} />
+                </button>
+                <span className="text-sm text-slate-500">{song.duration ?? ''}</span>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* 右侧：播放器，占 1/3 */}
-        <div className="w-1/3 h-full bg-white/60 backdrop-blur-lg flex flex-col">
+        {/* 播放器 */}
+        <div
+          className="
+            fixed top-0 left-0 w-full h-[33vh] z-20 bg-white/60 md:static md:w-1/3 md:h-full md:flex md:flex-col
+          "
+        >
           {/* 顶部控制栏 */}
           <div className="flex items-center justify-between p-4 border-b border-slate-200/70">
             <div className="flex items-center">
-              <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
-                {isPlaying ? (
-                  <div className="flex space-x-1">
-                    <div className="w-1 h-4 bg-white animate-pulse"></div>
-                    <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                  </div>
-                ) : (
-                  <span className="text-sm font-bold text-white">▶</span>
-                )}
-              </div>
+              {coverNodeSmall}
               <div>
                 <p className="font-bold text-lg text-slate-900">{currentSong?.name ?? '未选择'}</p>
                 <p className="text-slate-600">{currentSong?.artist ?? ''}</p>
@@ -297,19 +460,12 @@ const MusicPlayer = () => {
           </div>
 
           {/* 播放器内容 */}
-          <div className="flex-1 flex items-center justify-center p-6">
+          <div className="flex-1 flex items-center justify-center p-4 md:p-6">
             <div className="flex flex-col items-center w-full max-w-4xl">
               {/* 专辑封面和歌曲信息 */}
-              <div className="flex items-center justify-center mb-8 w-full">
-                <div className="flex items-center space-x-6">
-                  {/* 专辑封面（不再旋转） */}
-                  <div className="w-40 h-40 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
-                    <div className="w-full h-full bg-gradient-to-br from-sky-400 via-blue-400 to-cyan-400 flex items-center justify-center">
-                      <div className="text-white text-center">
-                        <span className="text-lg font-semibold">专辑封面</span>
-                      </div>
-                    </div>
-                  </div>
+              <div className="flex items-center justify-center mb-4 md:mb-8 w-full">
+                <div className="flex items-center space-x-4 md:space-x-6">
+                  {coverNodeLarge}
 
                   {/* 歌曲信息 */}
                   <div className="text-left max-w-xs">
@@ -321,7 +477,7 @@ const MusicPlayer = () => {
               </div>
 
               {/* 进度条 */}
-              <div className="w-full max-w-2xl mb-6">
+              <div className="w-full max-w-2xl mb-4 md:mb-6">
                 <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
                   <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
                     <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
@@ -334,7 +490,7 @@ const MusicPlayer = () => {
               </div>
 
               {/* 控制按钮 */}
-              <div className="flex items-center justify-center space-x-6 mb-6">
+              <div className="flex items-center justify-center space-x-6 mb-2 md:mb-6">
                 <button className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
                   <Shuffle size={20} />
                 </button>

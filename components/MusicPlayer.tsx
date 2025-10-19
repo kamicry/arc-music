@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1 } from 'lucide-react';
 
 // 音乐数据从服务器获取
 export type Track = {
@@ -27,12 +27,15 @@ const MusicPlayer = () => {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  type PlaybackMode = 'order' | 'single' | 'shuffle';
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('order');
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayRef = useRef(false);
   const latestCoverForUrlRef = useRef<string | null>(null);
   const coverObjectUrlRef = useRef<string | null>(null);
+  const playbackModeRef = useRef<PlaybackMode>('order');
 
   const currentSong = musicList[currentSongIndex];
 
@@ -75,6 +78,13 @@ const MusicPlayer = () => {
         stopProgressTimer();
       },
       onend: () => {
+        if (playbackModeRef.current === 'single') {
+          try {
+            howl.seek(0);
+            howl.play();
+          } catch {}
+          return;
+        }
         playNext();
       },
       onload: () => {
@@ -109,6 +119,11 @@ const MusicPlayer = () => {
       soundRef.current.volume(volume);
     }
   }, [volume]);
+
+  // 同步播放模式到 ref
+  useEffect(() => {
+    playbackModeRef.current = playbackMode;
+  }, [playbackMode]);
 
   // 解析内嵌专辑封面
   useEffect(() => {
@@ -271,7 +286,19 @@ const MusicPlayer = () => {
       soundRef.current.unload();
     }
     autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => (prevIndex === musicList.length - 1 ? 0 : prevIndex + 1));
+    setCurrentSongIndex((prevIndex) => {
+      if (musicList.length === 0) return prevIndex;
+      if (playbackMode === 'shuffle') {
+        if (musicList.length === 1) return prevIndex >= 0 ? prevIndex : 0;
+        let next = prevIndex;
+        while (next === prevIndex) {
+          next = Math.floor(Math.random() * musicList.length);
+        }
+        return next;
+      }
+      const base = prevIndex < 0 ? 0 : prevIndex;
+      return base === musicList.length - 1 ? 0 : base + 1;
+    });
     setProgress(0);
     setCurrentTime(0);
   };
@@ -282,7 +309,19 @@ const MusicPlayer = () => {
       soundRef.current.unload();
     }
     autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => (prevIndex <= 0 ? musicList.length - 1 : prevIndex - 1));
+    setCurrentSongIndex((prevIndex) => {
+      if (musicList.length === 0) return prevIndex;
+      if (playbackMode === 'shuffle') {
+        if (musicList.length === 1) return prevIndex >= 0 ? prevIndex : 0;
+        let next = prevIndex;
+        while (next === prevIndex) {
+          next = Math.floor(Math.random() * musicList.length);
+        }
+        return next;
+      }
+      const base = prevIndex < 0 ? 0 : prevIndex;
+      return base <= 0 ? musicList.length - 1 : base - 1;
+    });
     setProgress(0);
     setCurrentTime(0);
   };
@@ -407,6 +446,7 @@ const MusicPlayer = () => {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
                 placeholder="搜索歌曲/歌手/专辑"
                 className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white/70 text-slate-800 placeholder-slate-500"
               />
@@ -492,7 +532,11 @@ const MusicPlayer = () => {
               <button className="p-2 hover:text-slate-800 transition-colors">
                 <Heart size={20} />
               </button>
-              <button className="p-2 hover:text-slate-800 transition-colors">
+              <button
+                onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
+                className="p-2 hover:text-slate-800 transition-colors disabled:opacity-50"
+                disabled={!currentSong?.url}
+              >
                 <Share size={20} />
               </button>
             </div>
@@ -530,7 +574,22 @@ const MusicPlayer = () => {
 
               {/* 控制按钮 */}
               <div className="flex items-center justify-center space-x-6 mb-2 md:mb-6">
-                <button className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
+                <button onClick={() => {
+                  // 随机切换一首歌
+                  if (musicList.length === 0) return;
+                  if (soundRef.current) {
+                    soundRef.current.unload();
+                  }
+                  autoPlayRef.current = true;
+                  const prev = currentSongIndex;
+                  let idx = Math.floor(Math.random() * musicList.length);
+                  if (musicList.length > 1) {
+                    while (idx === prev) idx = Math.floor(Math.random() * musicList.length);
+                  }
+                  setCurrentSongIndex(idx);
+                  setProgress(0);
+                  setCurrentTime(0);
+                }} className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
                   <Shuffle size={20} />
                 </button>
 
@@ -546,8 +605,11 @@ const MusicPlayer = () => {
                   <SkipForward size={24} />
                 </button>
 
-                <button className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
-                  <Repeat size={20} />
+                <button
+                  onClick={() => setPlaybackMode((m) => (m === 'order' ? 'single' : m === 'single' ? 'shuffle' : 'order'))}
+                  className={`p-2 transition-all duration-300 transform hover:scale-110 ${playbackMode === 'order' ? 'text-slate-600 hover:text-slate-900' : 'text-sky-600 ring-1 ring-sky-400 rounded-full'}`}
+                >
+                  {playbackMode === 'single' ? <Repeat1 size={20} /> : playbackMode === 'shuffle' ? <Shuffle size={20} /> : <Repeat size={20} />}
                 </button>
               </div>
 

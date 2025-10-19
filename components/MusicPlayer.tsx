@@ -194,7 +194,7 @@ const MusicPlayer = () => {
       {/* 背景图层：读取 /bg 目录中的图片（默认 background.jpg），并添加模糊效果 */}
       <div className="absolute inset-0 -z-10">
         <div
-          className="h-full w-full bg-center bg-cover blur-xl scale-105 transform"
+          className="h-full w-full bg-center bg-cover scale-105 transform"
           style={{ backgroundImage: "url('/bg/3.jpeg')" }}
         />
         <div className="absolute inset-0 bg-white/50" />

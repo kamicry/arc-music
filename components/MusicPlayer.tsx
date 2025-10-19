@@ -197,7 +197,7 @@ const MusicPlayer = () => {
           className="h-full w-full bg-center bg-cover scale-105 transform"
           style={{ backgroundImage: "url('/bg/3.jpeg')" }}
         />
-        <div className="absolute inset-0 bg-white/5" />
+        <div className="absolute inset-0 bg-white/0" />
       </div>
 
       <div className="h-screen flex">

@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
 
 // 音乐数据从服务器获取
 export type Track = {
@@ -470,8 +470,9 @@ const MusicPlayer = () => {
               />
               <button
                 onClick={handleSearch}
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md"
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md inline-flex items-center"
               >
+                <Search size={16} className="mr-1" />
                 搜索
               </button>
             </div>

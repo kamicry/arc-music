@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
 
 // 音乐数据从服务器获取
 export type Track = {
@@ -256,12 +256,19 @@ const MusicPlayer = () => {
   const startProgressTimer = () => {
     stopProgressTimer();
     progressIntervalRef.current = setInterval(() => {
-      if (soundRef.current && soundRef.current.playing()) {
-        const seek = soundRef.current.seek() as number;
+      const s = soundRef.current;
+      if (s && s.playing()) {
+        const seek = (s.seek() as number) || 0;
+        const dur = s.duration();
         setCurrentTime(seek);
-        setProgress((seek / (duration || 1)) * 100);
+        if (dur && isFinite(dur) && dur > 0) {
+          const pct = Math.max(0, Math.min(100, (seek / dur) * 100));
+          setProgress(pct);
+        } else {
+          setProgress(0);
+        }
       }
-    }, 1000);
+    }, 500);
   };
 
   const stopProgressTimer = () => {
@@ -367,13 +374,20 @@ const MusicPlayer = () => {
 
   // 进度条点击跳转
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!soundRef.current) return;
+    const s = soundRef.current;
+    if (!s) return;
 
     const progressBar = e.currentTarget;
-    const clickPosition = (e.clientX - progressBar.getBoundingClientRect().left) / progressBar.offsetWidth;
-    const newTime = clickPosition * duration;
+    const rect = progressBar.getBoundingClientRect();
+    let clickPosition = (e.clientX - rect.left) / rect.width;
+    if (isNaN(clickPosition)) clickPosition = 0;
+    clickPosition = Math.max(0, Math.min(1, clickPosition));
 
-    soundRef.current.seek(newTime);
+    const dur = s.duration();
+    const baseDur = dur && isFinite(dur) && dur > 0 ? dur : duration || 0;
+    const newTime = clickPosition * baseDur;
+
+    s.seek(newTime);
     setCurrentTime(newTime);
     setProgress(clickPosition * 100);
   };
@@ -389,7 +403,10 @@ const MusicPlayer = () => {
 
   const coverNodeSmall = (
     <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
-      {isPlaying ? (
+      {coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+      ) : isPlaying ? (
         <div className="flex space-x-1">
           <div className="w-1 h-4 bg-white animate-pulse"></div>
           <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
@@ -402,7 +419,7 @@ const MusicPlayer = () => {
   );
 
   const coverNodeLarge = (
-    <div className="w-40 h-40 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
+    <div className="w-56 h-56 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
@@ -431,17 +448,17 @@ const MusicPlayer = () => {
         {/* 左侧/下方：歌曲列表 */}
         <div
           className={`
-            flex-1 overflow-y-auto p-4 pb-24
-            md:w-2/3 md:overflow-hidden md:flex md:flex-col md:border-r md:border-slate-200/70 md:bg-white/40 md:pb-0
+            flex-1 flex flex-col overflow-hidden p-4
+            md:w-2/3 md:border-r md:border-slate-200/70 md:bg-white/40
           `}
         >
-          <div className="p-6 border-b border-slate-200/70 hidden md:block">
+          <div className="px-4 py-2 md:px-6 md:py-3 border-b border-slate-200/70 shrink-0">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
               我的音乐库
             </h1>
           </div>
 
-          <div className="p-4 md:p-6 border-b border-slate-200/60">
+          <div className="p-3 md:p-6 border-b border-slate-200/60 shrink-0">
             <div className="flex space-x-2">
               <input
                 type="text"
@@ -453,64 +470,67 @@ const MusicPlayer = () => {
               />
               <button
                 onClick={handleSearch}
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md"
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md inline-flex items-center"
               >
+                <Search size={16} className="mr-1" />
                 搜索
               </button>
             </div>
           </div>
 
-          {musicList.length === 0 && (
-            <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
-          )}
-          {musicList.map((song, index) => (
-            <div
-              key={song.id}
-              className={`
-                group flex items-center p-4 rounded-2xl mb-3 cursor-pointer 
-                transition-all duration-300 transform hover:scale-[1.01]
-                ${index === currentSongIndex 
-                  ? 'bg-white/60 shadow-md' 
-                  : 'hover:bg-white/50'
-                }
-              `}
-              onClick={() => playSong(index)}
-            >
+          <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
+            {musicList.length === 0 && (
+              <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
+            )}
+            {musicList.map((song, index) => (
               <div
+                key={song.id}
                 className={`
-                  relative w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-4
-                  transition-all duration-300
-                  ${index === currentSongIndex ? 'shadow-md' : 'group-hover:shadow-sm'}
+                  group flex items-center p-4 rounded-2xl mb-3 cursor-pointer 
+                  transition-all duration-300 transform hover:scale-[1.01]
+                  ${index === currentSongIndex 
+                    ? 'bg-white/60 shadow-md' 
+                    : 'hover:bg-white/50'
+                  }
                 `}
+                onClick={() => playSong(index)}
               >
-                <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
-                  {index === currentSongIndex && isPlaying ? (
-                    <div className="flex space-x-1">
-                      <div className="w-1 h-3 bg-white animate-pulse"></div>
-                      <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-bold text-white">{index + 1}</span>
-                  )}
+                <div
+                  className={`
+                    relative w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-4
+                    transition-all duration-300
+                    ${index === currentSongIndex ? 'shadow-md' : 'group-hover:shadow-sm'}
+                  `}
+                >
+                  <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
+                    {index === currentSongIndex && isPlaying ? (
+                      <div className="flex space-x-1">
+                        <div className="w-1 h-3 bg-white animate-pulse"></div>
+                        <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-bold text-white">{index + 1}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className={`font-semibold truncate ${index === currentSongIndex ? 'text-slate-900' : 'text-slate-700'}`}>
+                    {song.name}
+                  </p>
+                  <p className="text-sm text-slate-500 truncate">{song.artist ?? ''}</p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
+                    <Heart size={16} />
+                  </button>
+                  <span className="text-sm text-slate-500">{song.duration ?? ''}</span>
                 </div>
               </div>
-
-              <div className="flex-1 min-w-0">
-                <p className={`font-semibold truncate ${index === currentSongIndex ? 'text-slate-900' : 'text-slate-700'}`}>
-                  {song.name}
-                </p>
-                <p className="text-sm text-slate-500 truncate">{song.artist ?? ''}</p>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
-                  <Heart size={16} />
-                </button>
-                <span className="text-sm text-slate-500">{song.duration ?? ''}</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* 播放器 */}
@@ -562,7 +582,7 @@ const MusicPlayer = () => {
 
               {/* 进度条 */}
               <div className="w-full max-w-2xl mb-4 md:mb-6">
-                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
+                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
                   <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
                     <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
                   </div>
@@ -686,7 +706,7 @@ const MusicPlayer = () => {
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="flex flex-col items-center w-full">
               <div className="w-full mb-3">
-                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
+                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
                   <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
                     <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
                   </div>

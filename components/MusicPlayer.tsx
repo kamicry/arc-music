@@ -434,17 +434,17 @@ const MusicPlayer = () => {
         {/* 左侧/下方：歌曲列表 */}
         <div
           className={`
-            flex-1 overflow-y-auto p-4 pb-24
-            md:w-2/3 md:overflow-hidden md:flex md:flex-col md:border-r md:border-slate-200/70 md:bg-white/40 md:pb-0
+            flex-1 flex flex-col overflow-hidden p-4
+            md:w-2/3 md:border-r md:border-slate-200/70 md:bg-white/40
           `}
         >
-          <div className="px-6 py-3 border-b border-slate-200/70 hidden md:block">
+          <div className="px-4 py-2 md:px-6 md:py-3 border-b border-slate-200/70 shrink-0">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
               我的音乐库
             </h1>
           </div>
 
-          <div className="p-4 md:p-6 border-b border-slate-200/60">
+          <div className="p-3 md:p-6 border-b border-slate-200/60 shrink-0">
             <div className="flex space-x-2">
               <input
                 type="text"
@@ -463,7 +463,7 @@ const MusicPlayer = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
             {musicList.length === 0 && (
               <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
             )}

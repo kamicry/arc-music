@@ -256,12 +256,19 @@ const MusicPlayer = () => {
   const startProgressTimer = () => {
     stopProgressTimer();
     progressIntervalRef.current = setInterval(() => {
-      if (soundRef.current && soundRef.current.playing()) {
-        const seek = soundRef.current.seek() as number;
+      const s = soundRef.current;
+      if (s && s.playing()) {
+        const seek = (s.seek() as number) || 0;
+        const dur = s.duration();
         setCurrentTime(seek);
-        setProgress((seek / (duration || 1)) * 100);
+        if (dur && isFinite(dur) && dur > 0) {
+          const pct = Math.max(0, Math.min(100, (seek / dur) * 100));
+          setProgress(pct);
+        } else {
+          setProgress(0);
+        }
       }
-    }, 1000);
+    }, 500);
   };
 
   const stopProgressTimer = () => {
@@ -367,13 +374,20 @@ const MusicPlayer = () => {
 
   // 进度条点击跳转
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!soundRef.current) return;
+    const s = soundRef.current;
+    if (!s) return;
 
     const progressBar = e.currentTarget;
-    const clickPosition = (e.clientX - progressBar.getBoundingClientRect().left) / progressBar.offsetWidth;
-    const newTime = clickPosition * duration;
+    const rect = progressBar.getBoundingClientRect();
+    let clickPosition = (e.clientX - rect.left) / rect.width;
+    if (isNaN(clickPosition)) clickPosition = 0;
+    clickPosition = Math.max(0, Math.min(1, clickPosition));
 
-    soundRef.current.seek(newTime);
+    const dur = s.duration();
+    const baseDur = dur && isFinite(dur) && dur > 0 ? dur : duration || 0;
+    const newTime = clickPosition * baseDur;
+
+    s.seek(newTime);
     setCurrentTime(newTime);
     setProgress(clickPosition * 100);
   };
@@ -567,7 +581,7 @@ const MusicPlayer = () => {
 
               {/* 进度条 */}
               <div className="w-full max-w-2xl mb-4 md:mb-6">
-                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
+                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
                   <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
                     <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
                   </div>
@@ -691,7 +705,7 @@ const MusicPlayer = () => {
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="flex flex-col items-center w-full">
               <div className="w-full mb-3">
-                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group" onClick={handleProgressClick}>
+                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
                   <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
                     <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
                   </div>

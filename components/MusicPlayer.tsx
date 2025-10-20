@@ -389,7 +389,10 @@ const MusicPlayer = () => {
 
   const coverNodeSmall = (
     <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
-      {isPlaying ? (
+      {coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+      ) : isPlaying ? (
         <div className="flex space-x-1">
           <div className="w-1 h-4 bg-white animate-pulse"></div>
           <div className="w-1 h-4 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
@@ -402,7 +405,7 @@ const MusicPlayer = () => {
   );
 
   const coverNodeLarge = (
-    <div className="w-40 h-40 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
+    <div className="w-56 h-56 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
@@ -435,7 +438,7 @@ const MusicPlayer = () => {
             md:w-2/3 md:overflow-hidden md:flex md:flex-col md:border-r md:border-slate-200/70 md:bg-white/40 md:pb-0
           `}
         >
-          <div className="p-6 border-b border-slate-200/70 hidden md:block">
+          <div className="px-6 py-3 border-b border-slate-200/70 hidden md:block">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
               我的音乐库
             </h1>
@@ -460,57 +463,59 @@ const MusicPlayer = () => {
             </div>
           </div>
 
-          {musicList.length === 0 && (
-            <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
-          )}
-          {musicList.map((song, index) => (
-            <div
-              key={song.id}
-              className={`
-                group flex items-center p-4 rounded-2xl mb-3 cursor-pointer 
-                transition-all duration-300 transform hover:scale-[1.01]
-                ${index === currentSongIndex 
-                  ? 'bg-white/60 shadow-md' 
-                  : 'hover:bg-white/50'
-                }
-              `}
-              onClick={() => playSong(index)}
-            >
+          <div className="flex-1 overflow-y-auto custom-scrollbar">
+            {musicList.length === 0 && (
+              <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
+            )}
+            {musicList.map((song, index) => (
               <div
+                key={song.id}
                 className={`
-                  relative w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-4
-                  transition-all duration-300
-                  ${index === currentSongIndex ? 'shadow-md' : 'group-hover:shadow-sm'}
+                  group flex items-center p-4 rounded-2xl mb-3 cursor-pointer 
+                  transition-all duration-300 transform hover:scale-[1.01]
+                  ${index === currentSongIndex 
+                    ? 'bg-white/60 shadow-md' 
+                    : 'hover:bg-white/50'
+                  }
                 `}
+                onClick={() => playSong(index)}
               >
-                <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
-                  {index === currentSongIndex && isPlaying ? (
-                    <div className="flex space-x-1">
-                      <div className="w-1 h-3 bg-white animate-pulse"></div>
-                      <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                      <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-bold text-white">{index + 1}</span>
-                  )}
+                <div
+                  className={`
+                    relative w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center mr-4
+                    transition-all duration-300
+                    ${index === currentSongIndex ? 'shadow-md' : 'group-hover:shadow-sm'}
+                  `}
+                >
+                  <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
+                    {index === currentSongIndex && isPlaying ? (
+                      <div className="flex space-x-1">
+                        <div className="w-1 h-3 bg-white animate-pulse"></div>
+                        <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                        <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-bold text-white">{index + 1}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className={`font-semibold truncate ${index === currentSongIndex ? 'text-slate-900' : 'text-slate-700'}`}>
+                    {song.name}
+                  </p>
+                  <p className="text-sm text-slate-500 truncate">{song.artist ?? ''}</p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
+                    <Heart size={16} />
+                  </button>
+                  <span className="text-sm text-slate-500">{song.duration ?? ''}</span>
                 </div>
               </div>
-
-              <div className="flex-1 min-w-0">
-                <p className={`font-semibold truncate ${index === currentSongIndex ? 'text-slate-900' : 'text-slate-700'}`}>
-                  {song.name}
-                </p>
-                <p className="text-sm text-slate-500 truncate">{song.artist ?? ''}</p>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
-                  <Heart size={16} />
-                </button>
-                <span className="text-sm text-slate-500">{song.duration ?? ''}</span>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* 播放器 */}

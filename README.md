@@ -90,8 +90,7 @@ npm start
 ## 📁 主要项目结构
 
 ```
-arc-music/
-├── index.html              
+arc-music/             
 ├── components/
 │   └── MusicPlayer.tsx    # 主页面
 ├── pages/

@@ -454,7 +454,7 @@ const MusicPlayer = () => {
         >
           <div className="px-4 py-2 md:px-6 md:py-3 border-b border-slate-200/70 shrink-0">
             <h1 className="text-3xl font-bold bg-gradient-to-r from-sky-500 to-blue-600 bg-clip-text text-transparent">
-              kamicry
+              Arc-music
             </h1>
           </div>
 

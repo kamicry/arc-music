@@ -6,7 +6,7 @@
 * 移动端
 | ![展开播放器]() | ![收起播放器]() |
 |-------------------------|-------------------------|
-![DdcIE0HoZmwsbnWDoijPW3OeNcXhzAVC.jpg](https://cdn.nodeimage.com/i/DdcIE0HoZmwsbnWDoijPW3OeNcXhzAVC.jpg) | ![kmCCQ9e12v9vfGYu3Obyx5GzkamcreKY.jpg](https://cdn.nodeimage.com/i/kmCCQ9e12v9vfGYu3Obyx5GzkamcreKY.jpg) 
+![DdcIE0HoZmwsbnWDoijPW3OeNcXhzAVC.jpg](https://cdn.nodeimage.com/i/DdcIE0HoZmwsbnWDoijPW3OeNcXhzAVC.jpg) | ![kmCCQ9e12v9vfGYu3Obyx5GzkamcreKY.jpg](https://cdn.nodeimage.com/i/kmCCQ9e12v9vfGYu3Obyx5GzkamcreKY.jpg) |
 
 
 ## ✨ 特性

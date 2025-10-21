@@ -15,7 +15,7 @@
 
 ### 环境要求
 
-- chrome或edge等内核较新的浏览器（webview版本较低及旧版Safari尚未成功加载页面）
+- chrome或edge等内核较新的浏览器（webview版本较低及旧版Safari可能存在错位）
 - 本地或服务器环境（推荐，因为音乐存储在本地，未来可能加入api功能可轻量化部署vercel等paas平台）
 
 ### 安装步骤

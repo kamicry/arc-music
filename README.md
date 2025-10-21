@@ -4,9 +4,7 @@
 * pc端:
 ![k3jT5GMpn9HXntiFYYsZmgyEXnXv5iQ0.jpg](https://cdn.nodeimage.com/i/k3jT5GMpn9HXntiFYYsZmgyEXnXv5iQ0.jpg) 
 * 移动端
-| ![展开播放器]() | ![收起播放器]() |
-|-------------------------|-------------------------|
-![DdcIE0HoZmwsbnWDoijPW3OeNcXhzAVC.jpg](https://cdn.nodeimage.com/i/DdcIE0HoZmwsbnWDoijPW3OeNcXhzAVC.jpg) | ![kmCCQ9e12v9vfGYu3Obyx5GzkamcreKY.jpg](https://cdn.nodeimage.com/i/kmCCQ9e12v9vfGYu3Obyx5GzkamcreKY.jpg) |
+![LtQgFXl37PSNIHvXtISnrSuXe2dWoHAH.jpg](https://cdn.nodeimage.com/i/LtQgFXl37PSNIHvXtISnrSuXe2dWoHAH.jpg) 
 
 
 ## ✨ 特性

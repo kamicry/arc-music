@@ -15,6 +15,28 @@ export type Track = {
   cover?: string;
 };
 
+const DEFAULT_BACKGROUND_IMAGE_URL = '/bg/3.jpeg';
+const DEFAULT_CUSTOM_BACKGROUND_IMAGE_URL = 'https://api.seaya.link/web.php';
+
+const rawBackgroundImageEnv = process.env.NEXT_PUBLIC_BACKGROUND_IMAGE_API;
+const normalizedBackgroundImageSource =
+  rawBackgroundImageEnv === undefined ? DEFAULT_CUSTOM_BACKGROUND_IMAGE_URL : rawBackgroundImageEnv.trim();
+
+const BACKGROUND_IMAGE_SOURCES =
+  normalizedBackgroundImageSource && normalizedBackgroundImageSource.length > 0
+    ? normalizedBackgroundImageSource === DEFAULT_BACKGROUND_IMAGE_URL
+      ? [DEFAULT_BACKGROUND_IMAGE_URL]
+      : [normalizedBackgroundImageSource, DEFAULT_BACKGROUND_IMAGE_URL]
+    : [DEFAULT_BACKGROUND_IMAGE_URL];
+
+const BACKGROUND_STYLE = (() => {
+  const backgroundImage = BACKGROUND_IMAGE_SOURCES.map((url) => `url("${url}")`).join(', ');
+  const backgroundPosition = BACKGROUND_IMAGE_SOURCES.map(() => 'center').join(', ');
+  const backgroundSize = BACKGROUND_IMAGE_SOURCES.map(() => 'cover').join(', ');
+  const backgroundRepeat = BACKGROUND_IMAGE_SOURCES.map(() => 'no-repeat').join(', ');
+  return { backgroundImage, backgroundPosition, backgroundSize, backgroundRepeat };
+})();
+
 const MusicPlayer = () => {
   // 播放器状态
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
@@ -438,7 +460,7 @@ const MusicPlayer = () => {
       <div className="absolute inset-0 -z-10">
         <div
           className="h-full w-full bg-center bg-cover scale-105 transform"
-          style={{ backgroundImage: "url('/bg/3.jpeg')" }}
+          style={BACKGROUND_STYLE}
         />
         <div className="absolute inset-0 bg-white/50" />
       </div>

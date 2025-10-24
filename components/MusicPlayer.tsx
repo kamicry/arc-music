@@ -1,19 +1,113 @@
 // components/MusicPlayer.tsx
 'use client';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Howl } from 'howler';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
+import { LOCAL_TRACKS, LocalTrack } from '../data/localTracks';
 
-// 音乐数据从服务器获取
-export type Track = {
-  id: number;
-  name: string;
-  url: string;
-  artist?: string;
+const MUSIC_API_BASE = 'https://music-api.gdstudio.xyz/api.php';
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const DEFAULT_SEARCH_COUNT = 8;
+const DEFAULT_COVER_SIZE = '300';
+
+type SearchApiItem = {
+  id: number | string;
+  name?: string;
+  artist?: string[] | string;
   album?: string;
-  duration?: string;
-  cover?: string;
+  pic_id?: string;
+  lyric_id?: string;
+  source?: string;
 };
+
+type UrlApiResponse = {
+  url?: string;
+  br?: number;
+  size?: number;
+};
+
+type PicApiResponse = {
+  url?: string;
+};
+
+export type Track = LocalTrack & {
+  url?: string;
+  cover?: string | null;
+  lyric?: string;
+  tLyric?: string;
+};
+
+function sanitizeUrl(url: string): string {
+  return url.replace(/&amp;/g, '&');
+}
+
+function createTrack(track: LocalTrack): Track {
+  return {
+    ...track,
+    url: undefined,
+    cover: track.picId ? undefined : null,
+  };
+}
+
+function normalizeText(value: string | undefined | null): string {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .replace(/&amp;/g, '&')
+    .replace(/[\s'"、，。！？!（）()【】\[\]《》“”‘’·._/\-]+/g, '');
+}
+
+function collectArtistTokens(artist: string[] | string | undefined): string[] {
+  if (!artist) return [];
+  const raw = Array.isArray(artist) ? artist : [artist];
+  return raw
+    .flatMap((item) => item.split(/[,，/&、x×+·]|feat\.?|ft\.?|with|合作|合唱/gi))
+    .map((token) => normalizeText(token))
+    .filter(Boolean);
+}
+
+function selectBestSearchResult(results: SearchApiItem[], target: Track): SearchApiItem | null {
+  if (!results || results.length === 0) return null;
+
+  const targetName = normalizeText(target.name);
+  const targetArtists = collectArtistTokens(target.artist);
+
+  let best = results[0];
+  let bestScore = -Infinity;
+  let bestIndex = 0;
+
+  results.forEach((item, index) => {
+    let score = 0;
+    const itemName = normalizeText(item.name);
+    const itemArtists = collectArtistTokens(item.artist);
+
+    if (targetName && itemName === targetName) {
+      score += 4;
+    } else if (targetName && itemName.includes(targetName)) {
+      score += 2;
+    }
+
+    if (targetArtists.length > 0 && itemArtists.length > 0) {
+      const hit = itemArtists.some((token) => targetArtists.includes(token));
+      if (hit) {
+        score += 4;
+      }
+    }
+
+    if (item.source && item.source === target.source) {
+      score += 1;
+    }
+
+    if (score > bestScore || (score === bestScore && index < bestIndex)) {
+      bestScore = score;
+      best = item;
+      bestIndex = index;
+    }
+  });
+
+  return best ?? null;
+}
 
 const MusicPlayer = () => {
   // 播放器状态
@@ -23,40 +117,249 @@ const MusicPlayer = () => {
   const [volume, setVolume] = useState(0.7);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [musicList, setMusicList] = useState<Track[]>([]);
+  const [allTracks, setAllTracks] = useState<Track[]>(() => LOCAL_TRACKS.map(createTrack));
+  const [musicList, setMusicList] = useState<Track[]>(() => LOCAL_TRACKS.map(createTrack));
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
-  const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   type PlaybackMode = 'order' | 'single' | 'shuffle';
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('order');
-  // 移动端：是否展开半屏播放器
   const [mobileExpanded, setMobileExpanded] = useState(false);
+  const [loadingTrackIndex, setLoadingTrackIndex] = useState<number | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const autoPlayRef = useRef(false);
-  const latestCoverForUrlRef = useRef<string | null>(null);
-  const coverObjectUrlRef = useRef<string | null>(null);
   const playbackModeRef = useRef<PlaybackMode>('order');
+  const playRequestIdRef = useRef(0);
+  const requestTimestampsRef = useRef<number[]>([]);
 
-  const currentSong = musicList[currentSongIndex];
+  const currentSong = currentSongIndex >= 0 ? musicList[currentSongIndex] : undefined;
 
-  // 加载服务器音乐列表
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/music');
-        if (!res.ok) return;
-        const data: Track[] = await res.json();
-        setAllTracks(data);
-        setMusicList(data);
-        setCurrentSongIndex(-1);
-      } catch (e) {
-        // ignore
-      }
-    };
-    load();
+    setCoverUrl(currentSong?.cover ?? null);
+  }, [currentSong?.cover]);
+
+  const registerRequest = useCallback(() => {
+    const now = Date.now();
+    const windowStart = now - RATE_LIMIT_WINDOW_MS;
+    requestTimestampsRef.current = requestTimestampsRef.current.filter((timestamp) => timestamp >= windowStart);
+    if (requestTimestampsRef.current.length >= RATE_LIMIT_MAX_REQUESTS) {
+      throw new Error('请求过于频繁，请稍后再试');
+    }
+    requestTimestampsRef.current.push(now);
   }, []);
+
+  const callMusicApi = useCallback(async <T,>(params: Record<string, string>): Promise<T> => {
+    registerRequest();
+    const url = `${MUSIC_API_BASE}?${new URLSearchParams(params).toString()}`;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error('音乐服务暂时不可用');
+    }
+    return (await response.json()) as T;
+  }, [registerRequest]);
+
+  const updateTrackInStates = useCallback((updated: Track) => {
+    setAllTracks((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    setMusicList((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+  }, []);
+
+  const ensureTrackResolved = useCallback(async (track: Track): Promise<Track> => {
+    if (track.url) {
+      return track;
+    }
+
+    const keyword = (track.keyword ?? `${track.name} ${track.artist ?? ''}`).trim();
+    let trackId = track.trackId;
+    let picId = track.picId;
+    let lyricId = track.lyricId;
+    let resolvedName = track.name;
+    let resolvedAlbum = track.album;
+    let resolvedArtist = track.artist;
+
+    if (!trackId) {
+      if (!keyword) {
+        throw new Error('未配置歌曲关键词');
+      }
+      const searchResults = await callMusicApi<SearchApiItem[]>({
+        types: 'search',
+        source: track.source,
+        name: keyword,
+        count: String(DEFAULT_SEARCH_COUNT),
+        pages: '1',
+      });
+      const list = Array.isArray(searchResults) ? searchResults : [];
+      const best = selectBestSearchResult(list, track);
+      if (!best) {
+        throw new Error('未找到对应歌曲');
+      }
+      trackId = String(best.id);
+      if (best.pic_id) {
+        picId = String(best.pic_id);
+      }
+      if (best.lyric_id) {
+        lyricId = String(best.lyric_id);
+      }
+      if (best.name) {
+        resolvedName = best.name;
+      }
+      if (best.album) {
+        resolvedAlbum = best.album;
+      }
+      const artistValue = best.artist;
+      const artistText = Array.isArray(artistValue) ? artistValue.join(', ') : artistValue;
+      if (artistText) {
+        resolvedArtist = artistText;
+      }
+    }
+
+    const bitrateParam = track.bitrate ? String(track.bitrate) : '320';
+
+    const urlData = await callMusicApi<UrlApiResponse>({
+      types: 'url',
+      source: track.source,
+      id: trackId,
+      br: bitrateParam,
+    });
+
+    if (!urlData || !urlData.url) {
+      throw new Error('未获取到播放链接');
+    }
+
+    const resolvedUrl = sanitizeUrl(urlData.url);
+    let cover = track.cover ?? null;
+
+    if (picId) {
+      try {
+        const picData = await callMusicApi<PicApiResponse>({
+          types: 'pic',
+          source: track.source,
+          id: picId,
+          size: DEFAULT_COVER_SIZE,
+        });
+        if (picData && typeof picData.url === 'string' && picData.url.trim()) {
+          cover = picData.url;
+        }
+      } catch {
+        // ignore cover fetch failure
+      }
+    }
+
+    const resolvedTrack: Track = {
+      ...track,
+      url: resolvedUrl,
+      trackId,
+      picId,
+      lyricId,
+      cover,
+      name: resolvedName,
+      album: resolvedAlbum,
+      artist: resolvedArtist,
+    };
+
+    updateTrackInStates(resolvedTrack);
+    return resolvedTrack;
+  }, [callMusicApi, updateTrackInStates]);
+
+  const playSong = useCallback(async (index: number) => {
+    if (index < 0 || index >= musicList.length) return;
+    if (loadingTrackIndex !== null && loadingTrackIndex === index) return;
+
+    const requestId = ++playRequestIdRef.current;
+    setLoadingTrackIndex(index);
+    setErrorMessage(null);
+    setIsPlaying(false);
+
+    try {
+      const baseTrack = musicList[index];
+      if (!baseTrack) {
+        throw new Error('未找到歌曲');
+      }
+
+      let resolvedTrack = baseTrack;
+      if (!resolvedTrack.url) {
+        resolvedTrack = await ensureTrackResolved(baseTrack);
+      }
+
+      if (playRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (soundRef.current) {
+        soundRef.current.unload();
+        soundRef.current = null;
+      }
+
+      autoPlayRef.current = true;
+      setProgress(0);
+      setCurrentTime(0);
+      setDuration(0);
+      setCurrentSongIndex(index);
+      setCoverUrl(resolvedTrack.cover ?? null);
+    } catch (err: unknown) {
+      if (playRequestIdRef.current === requestId) {
+        const message = err instanceof Error ? err.message : '播放失败，请稍后重试';
+        setErrorMessage(message);
+      }
+    } finally {
+      if (playRequestIdRef.current === requestId) {
+        setLoadingTrackIndex(null);
+      }
+    }
+  }, [ensureTrackResolved, musicList, loadingTrackIndex]);
+
+  const playNext = useCallback(() => {
+    if (musicList.length === 0) return;
+
+    const mode = playbackModeRef.current;
+    if (currentSongIndex < 0) {
+      void playSong(0);
+      return;
+    }
+
+    if (mode === 'shuffle') {
+      if (musicList.length === 1) {
+        void playSong(currentSongIndex);
+        return;
+      }
+      let candidate = currentSongIndex;
+      while (candidate === currentSongIndex) {
+        candidate = Math.floor(Math.random() * musicList.length);
+      }
+      void playSong(candidate);
+      return;
+    }
+
+    const nextIndex = currentSongIndex >= musicList.length - 1 ? 0 : currentSongIndex + 1;
+    void playSong(nextIndex);
+  }, [currentSongIndex, musicList, playSong]);
+
+  const playPrevious = useCallback(() => {
+    if (musicList.length === 0) return;
+
+    const mode = playbackModeRef.current;
+    if (currentSongIndex < 0) {
+      void playSong(0);
+      return;
+    }
+
+    if (mode === 'shuffle') {
+      if (musicList.length === 1) {
+        void playSong(currentSongIndex);
+        return;
+      }
+      let candidate = currentSongIndex;
+      while (candidate === currentSongIndex) {
+        candidate = Math.floor(Math.random() * musicList.length);
+      }
+      void playSong(candidate);
+      return;
+    }
+
+    const previousIndex = currentSongIndex <= 0 ? musicList.length - 1 : currentSongIndex - 1;
+    void playSong(previousIndex);
+  }, [currentSongIndex, musicList, playSong]);
 
   // 初始化音频
   useEffect(() => {
@@ -127,131 +430,6 @@ const MusicPlayer = () => {
     playbackModeRef.current = playbackMode;
   }, [playbackMode]);
 
-  // 解析内嵌专辑封面
-  useEffect(() => {
-    const url = currentSong?.url;
-    setCoverUrl(currentSong?.cover || null);
-    if (!url) return;
-
-    let aborted = false;
-    latestCoverForUrlRef.current = url;
-
-    const synchsafeToSize = (bytes: Uint8Array) => {
-      return (bytes[0] & 0x7f) * 0x200000 + (bytes[1] & 0x7f) * 0x4000 + (bytes[2] & 0x7f) * 0x80 + (bytes[3] & 0x7f);
-    };
-
-    const textDecoder = new TextDecoder('iso-8859-1');
-
-    const parseApic = (buf: ArrayBuffer) => {
-      const bytes = new Uint8Array(buf);
-      if (bytes.length < 10) return null as string | null;
-      if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
-      const ver = bytes[3];
-      const tagSize = synchsafeToSize(bytes.subarray(6, 10));
-      let offset = 10;
-      const end = 10 + tagSize;
-      while (offset + 10 <= bytes.length && offset + 10 <= end) {
-        // frame header
-        const id = textDecoder.decode(bytes.subarray(offset, offset + 4));
-        let frameSize = 0;
-        if (ver === 4) {
-          frameSize = synchsafeToSize(bytes.subarray(offset + 4, offset + 8));
-        } else {
-          frameSize =
-            (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
-        }
-        const frameStart = offset + 10;
-        if (frameSize <= 0) break;
-        if (id === 'APIC') {
-          const enc = bytes[frameStart];
-          let i = frameStart + 1;
-          // MIME type (latin1, null-terminated)
-          let mimeEnd = i;
-          while (mimeEnd < frameStart + frameSize && bytes[mimeEnd] !== 0x00) mimeEnd++;
-          const mime = textDecoder.decode(bytes.subarray(i, mimeEnd)) || 'image/jpeg';
-          i = mimeEnd + 1;
-          // picture type
-          i += 1;
-          // description (encoding dependent, null-terminated)
-          if (enc === 0x00 || enc === 0x03) {
-            while (i < frameStart + frameSize && bytes[i] !== 0x00) i++;
-            i += 1;
-          } else if (enc === 0x01 || enc === 0x02) {
-            // UTF-16 with BOM or without; terminate with 0x00 0x00
-            while (i + 1 < frameStart + frameSize) {
-              if (bytes[i] === 0x00 && bytes[i + 1] === 0x00) {
-                i += 2;
-                break;
-              }
-              i += 2;
-            }
-          }
-          const imgStart = i;
-          const imgEnd = Math.min(frameStart + frameSize, bytes.length);
-          const imgBytes = bytes.subarray(imgStart, imgEnd);
-          const blob = new Blob([imgBytes], { type: mime });
-          return URL.createObjectURL(blob);
-        }
-        offset = frameStart + frameSize;
-      }
-      return null as string | null;
-    };
-
-    const fetchCover = async () => {
-      try {
-        const headResp = await fetch(url, { headers: { Range: 'bytes=0-10240' }, cache: 'no-store' });
-        const headBuf = await headResp.arrayBuffer();
-        const headerBytes = new Uint8Array(headBuf);
-        if (headerBytes.length >= 10 && headerBytes[0] === 0x49 && headerBytes[1] === 0x44 && headerBytes[2] === 0x33) {
-          const size = synchsafeToSize(headerBytes.subarray(6, 10));
-          const total = 10 + size;
-          const rangeEnd = Math.max(10240, total);
-          const resp = await fetch(url, { headers: { Range: `bytes=0-${rangeEnd - 1}` }, cache: 'no-store' });
-          const buf = await resp.arrayBuffer();
-          if (aborted) return;
-          const cover = parseApic(buf);
-          if (!aborted && latestCoverForUrlRef.current === url) {
-            if (cover && cover.startsWith('blob:')) {
-              if (coverObjectUrlRef.current && coverObjectUrlRef.current !== cover) {
-                try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
-              }
-              coverObjectUrlRef.current = cover;
-            }
-            setCoverUrl(cover);
-          }
-        } else {
-          // Not ID3v2, try a larger chunk
-          const resp = await fetch(url, { cache: 'no-store' });
-          const buf = await resp.arrayBuffer();
-          if (aborted) return;
-          const cover = parseApic(buf);
-          if (!aborted && latestCoverForUrlRef.current === url) {
-            if (cover && cover.startsWith('blob:')) {
-              if (coverObjectUrlRef.current && coverObjectUrlRef.current !== cover) {
-                try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
-              }
-              coverObjectUrlRef.current = cover;
-            }
-            setCoverUrl(cover);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    setCoverUrl(currentSong?.cover || null);
-    fetchCover();
-
-    return () => {
-      aborted = true;
-      if (coverObjectUrlRef.current) {
-        try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
-        coverObjectUrlRef.current = null;
-      }
-    };
-  }, [currentSong?.url]);
-
   // 进度计时器
   const startProgressTimer = () => {
     stopProgressTimer();
@@ -289,81 +467,29 @@ const MusicPlayer = () => {
     }
   };
 
-  const playNext = () => {
-    if (musicList.length === 0) return;
-    if (soundRef.current) {
-      soundRef.current.unload();
-    }
-    autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => {
-      if (musicList.length === 0) return prevIndex;
-      if (playbackMode === 'shuffle') {
-        if (musicList.length === 1) return prevIndex >= 0 ? prevIndex : 0;
-        let next = prevIndex;
-        while (next === prevIndex) {
-          next = Math.floor(Math.random() * musicList.length);
-        }
-        return next;
-      }
-      const base = prevIndex < 0 ? 0 : prevIndex;
-      return base === musicList.length - 1 ? 0 : base + 1;
-    });
-    setProgress(0);
-    setCurrentTime(0);
-  };
-
-  const playPrevious = () => {
-    if (musicList.length === 0) return;
-    if (soundRef.current) {
-      soundRef.current.unload();
-    }
-    autoPlayRef.current = true;
-    setCurrentSongIndex((prevIndex) => {
-      if (musicList.length === 0) return prevIndex;
-      if (playbackMode === 'shuffle') {
-        if (musicList.length === 1) return prevIndex >= 0 ? prevIndex : 0;
-        let next = prevIndex;
-        while (next === prevIndex) {
-          next = Math.floor(Math.random() * musicList.length);
-        }
-        return next;
-      }
-      const base = prevIndex < 0 ? 0 : prevIndex;
-      return base <= 0 ? musicList.length - 1 : base - 1;
-    });
-    setProgress(0);
-    setCurrentTime(0);
-  };
-
-  // 选择播放列表中的歌曲
-  const playSong = (index: number) => {
-    if (musicList.length === 0) return;
-    if (soundRef.current) {
-      soundRef.current.unload();
-    }
-    autoPlayRef.current = true;
-    setCurrentSongIndex(index);
-    setProgress(0);
-    setCurrentTime(0);
-  };
-
   // 搜索并更新当前播放列表
   const handleSearch = () => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term) {
-      setMusicList(allTracks);
-    } else {
-      const filtered = allTracks.filter((t) =>
-        (t.name && t.name.toLowerCase().includes(term)) ||
-        (t.artist && t.artist.toLowerCase().includes(term)) ||
-        (t.album && t.album.toLowerCase().includes(term))
-      );
-      setMusicList(filtered);
-    }
+    const keyword = searchTerm.trim().toLowerCase();
+
+    const filtered = keyword
+      ? allTracks.filter((track) => {
+          const nameMatch = track.name?.toLowerCase().includes(keyword);
+          const artistMatch = track.artist?.toLowerCase().includes(keyword);
+          const albumMatch = track.album?.toLowerCase().includes(keyword);
+          return Boolean(nameMatch || artistMatch || albumMatch);
+        })
+      : allTracks;
+
+    setMusicList(filtered);
+    playRequestIdRef.current += 1;
+    setLoadingTrackIndex(null);
+    setErrorMessage(null);
+
     if (soundRef.current) {
       soundRef.current.unload();
       soundRef.current = null;
     }
+
     setIsPlaying(false);
     setCurrentSongIndex(-1);
     setCoverUrl(null);
@@ -476,11 +602,14 @@ const MusicPlayer = () => {
                 搜索
               </button>
             </div>
+            {errorMessage && (
+              <div className="mt-2 text-sm text-red-500">{errorMessage}</div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
             {musicList.length === 0 && (
-              <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请在服务器的 public/music 目录放入音频文件。' : '未找到匹配的歌曲'}</div>
+              <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请检查本地曲目配置。' : '未找到匹配的歌曲'}</div>
             )}
             {musicList.map((song, index) => (
               <div
@@ -493,7 +622,7 @@ const MusicPlayer = () => {
                     : 'hover:bg-white/50'
                   }
                 `}
-                onClick={() => playSong(index)}
+                onClick={() => { void playSong(index); }}
               >
                 <div
                   className={`
@@ -503,7 +632,9 @@ const MusicPlayer = () => {
                   `}
                 >
                   <div className="w-full h-full bg-gradient-to-br from-sky-400 to-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
-                    {index === currentSongIndex && isPlaying ? (
+                    {loadingTrackIndex === index ? (
+                      <div className="w-5 h-5 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+                    ) : index === currentSongIndex && isPlaying ? (
                       <div className="flex space-x-1">
                         <div className="w-1 h-3 bg-white animate-pulse"></div>
                         <div className="w-1 h-3 bg-white animate-pulse" style={{ animationDelay: '0.2s' }}></div>
@@ -595,22 +726,19 @@ const MusicPlayer = () => {
 
               {/* 控制按钮 */}
               <div className="flex items-center justify-center space-x-6 mb-2 md:mb-6">
-                <button onClick={() => {
-                  // 随机切换一首歌
-                  if (musicList.length === 0) return;
-                  if (soundRef.current) {
-                    soundRef.current.unload();
-                  }
-                  autoPlayRef.current = true;
-                  const prev = currentSongIndex;
-                  let idx = Math.floor(Math.random() * musicList.length);
-                  if (musicList.length > 1) {
-                    while (idx === prev) idx = Math.floor(Math.random() * musicList.length);
-                  }
-                  setCurrentSongIndex(idx);
-                  setProgress(0);
-                  setCurrentTime(0);
-                }} className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110">
+                <button
+                  onClick={() => {
+                    if (musicList.length === 0) return;
+                    let idx = Math.floor(Math.random() * musicList.length);
+                    if (musicList.length > 1 && currentSongIndex >= 0) {
+                      while (idx === currentSongIndex) {
+                        idx = Math.floor(Math.random() * musicList.length);
+                      }
+                    }
+                    void playSong(idx);
+                  }}
+                  className="p-2 text-slate-600 hover:text-slate-900 transition-all duration-300 transform hover:scale-110"
+                >
                   <Shuffle size={20} />
                 </button>
 
@@ -717,21 +845,19 @@ const MusicPlayer = () => {
                 </div>
               </div>
               <div className="flex items-center justify-center space-x-6 mb-2">
-                <button onClick={() => {
-                  if (musicList.length === 0) return;
-                  if (soundRef.current) {
-                    soundRef.current.unload();
-                  }
-                  autoPlayRef.current = true;
-                  const prev = currentSongIndex;
-                  let idx = Math.floor(Math.random() * musicList.length);
-                  if (musicList.length > 1) {
-                    while (idx === prev) idx = Math.floor(Math.random() * musicList.length);
-                  }
-                  setCurrentSongIndex(idx);
-                  setProgress(0);
-                  setCurrentTime(0);
-                }} className="p-2 text-slate-600 hover:text-slate-900">
+                <button
+                  onClick={() => {
+                    if (musicList.length === 0) return;
+                    let idx = Math.floor(Math.random() * musicList.length);
+                    if (musicList.length > 1 && currentSongIndex >= 0) {
+                      while (idx === currentSongIndex) {
+                        idx = Math.floor(Math.random() * musicList.length);
+                      }
+                    }
+                    void playSong(idx);
+                  }}
+                  className="p-2 text-slate-600 hover:text-slate-900"
+                >
                   <Shuffle size={20} />
                 </button>
                 <button onClick={playPrevious} className="p-2 text-slate-600 hover:text-slate-900">

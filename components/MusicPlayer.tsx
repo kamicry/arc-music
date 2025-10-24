@@ -1,6 +1,6 @@
 // components/MusicPlayer.tsx
 'use client';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
 
@@ -27,7 +27,6 @@ const MusicPlayer = () => {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [backgroundImage, setBackgroundImage] = useState<string | null>(null);
   type PlaybackMode = 'order' | 'single' | 'shuffle';
   const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('order');
   // 移动端：是否展开半屏播放器
@@ -38,21 +37,9 @@ const MusicPlayer = () => {
   const autoPlayRef = useRef(false);
   const latestCoverForUrlRef = useRef<string | null>(null);
   const coverObjectUrlRef = useRef<string | null>(null);
-  const backgroundObjectUrlRef = useRef<string | null>(null);
   const playbackModeRef = useRef<PlaybackMode>('order');
 
   const currentSong = musicList[currentSongIndex];
-
-  const cleanupBackgroundObjectUrl = useCallback(() => {
-    if (backgroundObjectUrlRef.current) {
-      try {
-        URL.revokeObjectURL(backgroundObjectUrlRef.current);
-      } catch {
-        // ignore
-      }
-      backgroundObjectUrlRef.current = null;
-    }
-  }, []);
 
   // 加载服务器音乐列表
   useEffect(() => {
@@ -70,90 +57,6 @@ const MusicPlayer = () => {
     };
     load();
   }, []);
-
-  // 背景图加载
-  useEffect(() => {
-    let aborted = false;
-
-    const isLikelyImageSource = (value: string) => {
-      if (!value) return false;
-      if (value.startsWith('data:image/')) return true;
-      if (/\.(png|jpe?g|gif|bmp|webp|svg|avif)(\?|#|$)/i.test(value)) return true;
-      if (/api\.seaya\.link/.test(value)) return true;
-      return false;
-    };
-
-    const applyUrl = (url: string, isObjectUrl: boolean) => {
-      if (aborted) return;
-      cleanupBackgroundObjectUrl();
-      if (isObjectUrl) {
-        backgroundObjectUrlRef.current = url;
-      }
-      setBackgroundImage(url);
-    };
-
-    const resolveCandidate = (candidate: unknown): boolean => {
-      if (typeof candidate === 'string') {
-        const trimmed = candidate.trim();
-        if (!trimmed) return false;
-        if (!isLikelyImageSource(trimmed)) return false;
-        applyUrl(trimmed, false);
-        return true;
-      }
-      return false;
-    };
-
-    const fetchBackground = async () => {
-      try {
-        const response = await fetch('https://api.seaya.link/web/type/file', { cache: 'no-store' });
-        if (!response.ok) return;
-
-        const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-
-        if (contentType.includes('application/json')) {
-          const data = await response.json();
-          if (aborted) return;
-
-          const record = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null;
-          if (record) {
-            if (resolveCandidate(record['url'])) return;
-            if (resolveCandidate(record['img'])) return;
-            if (resolveCandidate(record['image'])) return;
-            if (resolveCandidate(record['data'])) return;
-          }
-          if (resolveCandidate(data)) return;
-        } else if (contentType.startsWith('image/')) {
-          const blob = await response.blob();
-          if (aborted) return;
-
-          const objectUrl = URL.createObjectURL(blob);
-          applyUrl(objectUrl, true);
-          return;
-        } else {
-          const text = await response.text();
-          if (aborted) return;
-
-          const matches = text.match(/https?:\/\/[^\s"'<>]+/g);
-          if (matches) {
-            const candidate = matches.find((item) => isLikelyImageSource(item));
-            if (candidate) {
-              applyUrl(candidate, false);
-              return;
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    };
-
-    fetchBackground();
-
-    return () => {
-      aborted = true;
-      cleanupBackgroundObjectUrl();
-    };
-  }, [cleanupBackgroundObjectUrl]);
 
   // 初始化音频
   useEffect(() => {
@@ -530,16 +433,12 @@ const MusicPlayer = () => {
     </div>
   );
 
-  const backgroundStyle = {
-    backgroundImage: backgroundImage ? `url(${backgroundImage})` : "url('/bg/3.jpeg')",
-  };
-
   return (
     <div className="relative min-h-screen text-slate-800">
       <div className="absolute inset-0 -z-10">
         <div
           className="h-full w-full bg-center bg-cover scale-105 transform"
-          style={backgroundStyle}
+          style={{ backgroundImage: "url('bg/3.jpeg')" }}
         />
         <div className="absolute inset-0 bg-white/50" />
       </div>

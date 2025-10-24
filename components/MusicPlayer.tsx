@@ -438,7 +438,7 @@ const MusicPlayer = () => {
       <div className="absolute inset-0 -z-10">
         <div
           className="h-full w-full bg-center bg-cover scale-105 transform"
-          style={{ backgroundImage: "url('https://api.seaya.link/web')" }}
+          style={{ backgroundImage: "url('bg/3.jpeg')" }}
         />
         <div className="absolute inset-0 bg-white/50" />
       </div>

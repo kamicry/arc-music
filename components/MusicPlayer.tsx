@@ -105,7 +105,7 @@ const MusicPlayer = () => {
 
     const fetchBackground = async () => {
       try {
-        const response = await fetch('https://api.seaya.link/web.php', { cache: 'no-store' });
+        const response = await fetch('https://api.seaya.link/web/type/file', { cache: 'no-store' });
         if (!response.ok) return;
 
         const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';

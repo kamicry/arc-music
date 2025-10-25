@@ -1,6 +1,6 @@
 // components/MusicPlayer.tsx
 'use client';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Howl } from 'howler';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
 import { LOCAL_TRACKS, LocalTrack, MusicSource } from '../data/localTracks';
@@ -39,11 +39,16 @@ type PicApiResponse = {
   url?: string;
 };
 
+type LyricApiResponse = {
+  lyric?: string | null;
+  tlyric?: string | null;
+};
+
 export type Track = LocalTrack & {
   url?: string;
   cover?: string | null;
-  lyric?: string;
-  tLyric?: string;
+  lyric?: string | null;
+  tLyric?: string | null;
 };
 
 function sanitizeUrl(url: string): string {
@@ -55,7 +60,17 @@ function createTrack(track: LocalTrack): Track {
     ...track,
     url: undefined,
     cover: track.picId ? undefined : null,
+    lyric: null,
+    tLyric: null,
   };
+}
+
+function parseLyricLines(lyric: string | null | undefined): string[] {
+  if (!lyric) return [];
+  return lyric
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\[[^\]]*]/g, '').trim())
+    .filter((line) => line.length > 0);
 }
 
 const DEFAULT_SOURCE: MusicSource = 'netease';
@@ -143,6 +158,7 @@ const MusicPlayer = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showingSearchResults, setShowingSearchResults] = useState(false);
+  const [showTranslation, setShowTranslation] = useState(false);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -157,6 +173,30 @@ const MusicPlayer = () => {
   useEffect(() => {
     setCoverUrl(currentSong?.cover ?? null);
   }, [currentSong?.cover]);
+
+  useEffect(() => {
+    setShowTranslation(false);
+  }, [currentSong?.id]);
+
+  const originalLyricLines = useMemo(() => parseLyricLines(currentSong?.lyric), [currentSong?.lyric]);
+  const translationLyricLines = useMemo(() => parseLyricLines(currentSong?.tLyric), [currentSong?.tLyric]);
+  const displayLyricLines = useMemo(() => {
+    const hasTranslation = translationLyricLines.length > 0;
+    const hasOriginal = originalLyricLines.length > 0;
+    if (showTranslation && hasTranslation) {
+      return translationLyricLines;
+    }
+    if (hasOriginal) {
+      return originalLyricLines;
+    }
+    if (hasTranslation) {
+      return translationLyricLines;
+    }
+    return [] as string[];
+  }, [originalLyricLines, showTranslation, translationLyricLines]);
+  const hasTranslationLyric = translationLyricLines.length > 0;
+  const hasOriginalLyric = originalLyricLines.length > 0;
+  const hasAnyLyric = displayLyricLines.length > 0 || hasTranslationLyric || hasOriginalLyric;
 
   const registerRequest = useCallback(() => {
     const now = Date.now();
@@ -196,6 +236,8 @@ const MusicPlayer = () => {
     let resolvedName = track.name;
     let resolvedAlbum = track.album;
     let resolvedArtist = track.artist;
+    let lyricText = track.lyric ?? null;
+    let translationText = track.tLyric ?? null;
 
     if (!trackId) {
       if (!keyword) {
@@ -265,6 +307,26 @@ const MusicPlayer = () => {
       }
     }
 
+    if (!lyricText && lyricId) {
+      try {
+        const lyricData = await callMusicApi<LyricApiResponse>({
+          types: 'lyric',
+          source: track.source,
+          id: lyricId,
+        });
+        if (lyricData) {
+          if (typeof lyricData.lyric === 'string' && lyricData.lyric.trim()) {
+            lyricText = lyricData.lyric;
+          }
+          if (typeof lyricData.tlyric === 'string' && lyricData.tlyric.trim()) {
+            translationText = lyricData.tlyric;
+          }
+        }
+      } catch {
+        // ignore lyric fetch failure
+      }
+    }
+
     const resolvedTrack: Track = {
       ...track,
       url: resolvedUrl,
@@ -276,6 +338,8 @@ const MusicPlayer = () => {
       album: resolvedAlbum,
       artist: resolvedArtist,
       bitrate: desiredBitrate,
+      lyric: lyricText,
+      tLyric: translationText,
     };
 
     updateTrackInStates(resolvedTrack);
@@ -941,6 +1005,34 @@ const MusicPlayer = () => {
                 </button>
               </div>
 
+              {currentSong && (
+                <div className="w-full max-w-2xl mb-4 md:mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-600">歌词</span>
+                    {hasTranslationLyric && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTranslation((prev) => !prev)}
+                        className="text-xs px-2 py-1 rounded-md border border-sky-400 text-sky-600 hover:bg-sky-50 transition-colors"
+                      >
+                        {showTranslation ? '查看原文' : '查看翻译'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="h-48 overflow-y-auto custom-scrollbar bg-white/60 border border-slate-200 rounded-xl p-4">
+                    {hasAnyLyric && displayLyricLines.length > 0 ? (
+                      displayLyricLines.map((line, idx) => (
+                        <p key={`lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`} className="text-sm text-slate-700 leading-relaxed">
+                          {line}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">暂无歌词</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 音量控制 */}
               <div className="flex items-center justify-center space-x-4">
                 <Volume2 size={20} className="text-slate-600" />
@@ -1023,6 +1115,34 @@ const MusicPlayer = () => {
                   <span>{formatTime(duration)}</span>
                 </div>
               </div>
+              {currentSong && (
+                <div className="w-full mb-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-semibold text-slate-600">歌词</span>
+                    {hasTranslationLyric && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTranslation((prev) => !prev)}
+                        className="text-xs px-2 py-1 rounded-md border border-sky-400 text-sky-600 hover:bg-sky-50 transition-colors"
+                      >
+                        {showTranslation ? '查看原文' : '查看翻译'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="h-40 overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3">
+                    {hasAnyLyric && displayLyricLines.length > 0 ? (
+                      displayLyricLines.map((line, idx) => (
+                        <p key={`lyric-mobile-${showTranslation ? 'trans' : 'orig'}-${idx}`} className="text-sm text-slate-700 leading-relaxed">
+                          {line}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">暂无歌词</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-center space-x-6 mb-2">
                 <button
                   onClick={() => {

@@ -1063,7 +1063,7 @@ const MusicPlayer = () => {
           {/* 播放器内容 */}
           <div className="flex-1 flex items-center justify-center p-4 md:p-6">
             <div className="flex flex-col items-center w-full max-w-4xl h-full">
-              <div className="flex-1 w-full flex flex-col items-center overflow-hidden">
+              <div className="flex-1 w-full flex flex-col items-center min-h-0">
                 {!lyricsExpanded && (
                   <div className="flex items-center justify-center w-full mt-2 md:mt-0 mb-4 md:mb-6">
                     <div className="flex items-center space-x-4 md:space-x-6">
@@ -1082,7 +1082,7 @@ const MusicPlayer = () => {
                   <div
                     className={`w-full max-w-2xl ${
                       lyricsExpanded ? 'flex-1 flex flex-col mt-2 md:mt-4 mb-4 md:mb-6' : 'mb-4 md:mb-6'
-                    }`}
+                    } min-h-0`}
                   >
                     <div className={`flex items-center justify-between ${lyricsExpanded ? 'mb-3' : 'mb-2'}`}>
                       <span className="text-sm font-semibold text-slate-600">歌词</span>
@@ -1108,7 +1108,7 @@ const MusicPlayer = () => {
                     {lyricsExpanded ? (
                       <div
                         ref={lyricDesktopRef}
-                        className="flex-1 overflow-y-auto max-h-[280px] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-4"
+                        className="flex-1 min-h-[8rem] overflow-y-auto max-h-[calc(100vh-22rem)] md:max-h-[calc(100vh-20rem)] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-4"
                       >
                         {displayLyricLines.length > 0 ? (
                           displayLyricLines.map((line, idx) => {
@@ -1243,7 +1243,7 @@ const MusicPlayer = () => {
           </div>
         </div>
         <div
-          className={`md:hidden fixed inset-x-0 bottom-0 z-40 bg-white/90 backdrop-blur shadow-2xl flex flex-col overflow-hidden rounded-t-2xl transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-0 h-[68vh]' : 'translate-y-full pointer-events-none h-[55vh]'}`}
+          className={`md:hidden fixed inset-x-0 bottom-0 z-40 bg-white/90 backdrop-blur shadow-2xl flex flex-col overflow-hidden rounded-t-2xl transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-0 h-[65vh]' : 'translate-y-full pointer-events-none h-[52vh]'}`}
         >
           <div className={`flex items-center justify-between p-4 border-b border-slate-200/70 ${lyricsExpanded ? 'hidden' : ''}`}>
             <div className="flex items-center">
@@ -1297,7 +1297,7 @@ const MusicPlayer = () => {
                   {lyricsExpanded ? (
                     <div
                       ref={lyricMobileRef}
-                      className="flex-1 overflow-y-auto max-h-[280px] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3"
+                      className="flex-1 min-h-[8rem] overflow-y-auto max-h-[calc(100vh-24rem)] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3"
                     >
                       {displayLyricLines.length > 0 ? (
                         displayLyricLines.map((line, idx) => {

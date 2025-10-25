@@ -375,7 +375,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
         source: track.source,
         name: keyword,
         count: String(DEFAULT_SEARCH_COUNT),
-        pages: String(page),
+        pages: '1',
       });
       const list = Array.isArray(searchResults) ? searchResults : [];
       const best = selectBestSearchResult(list, track);

@@ -39,6 +39,11 @@ type PicApiResponse = {
   url?: string;
 };
 
+type LyricLine = {
+  time: number;
+  text: string;
+};
+
 type LyricApiResponse = {
   lyric?: string | null;
   tlyric?: string | null;
@@ -65,12 +70,49 @@ function createTrack(track: LocalTrack): Track {
   };
 }
 
-function parseLyricLines(lyric: string | null | undefined): string[] {
+function parseLyricLines(lyric: string | null | undefined): LyricLine[] {
   if (!lyric) return [];
-  return lyric
-    .split(/\r?\n/)
-    .map((line) => line.replace(/\[[^\]]*]/g, '').trim())
-    .filter((line) => line.length > 0);
+  const result: LyricLine[] = [];
+  const lines = lyric.split(/\r?\n/);
+  const timeTagRegex = /\[(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?]/g;
+
+  for (const line of lines) {
+    const text = line.replace(timeTagRegex, '').trim();
+    const matches = [...line.matchAll(timeTagRegex)];
+
+    if (matches.length === 0) {
+      if (text.length > 0) {
+        result.push({ time: Number.POSITIVE_INFINITY, text });
+      }
+      continue;
+    }
+
+    for (const match of matches) {
+      const minutes = Number.parseInt(match[1] ?? '0', 10);
+      const seconds = Number.parseInt(match[2] ?? '0', 10);
+      const millisRaw = match[3] ?? '0';
+      const millis = Number.parseInt(millisRaw.padEnd(3, '0').slice(0, 3), 10);
+      const totalSeconds = minutes * 60 + seconds + millis / 1000;
+      if (text.length > 0) {
+        result.push({ time: totalSeconds, text });
+      }
+    }
+  }
+
+  return result
+    .sort((a, b) => a.time - b.time)
+    .reduce<LyricLine[]>((acc, current) => {
+      if (acc.length === 0) {
+        acc.push(current);
+        return acc;
+      }
+      const prev = acc[acc.length - 1];
+      if (prev.time === current.time && prev.text === current.text) {
+        return acc;
+      }
+      acc.push(current);
+      return acc;
+    }, []);
 }
 
 const DEFAULT_SOURCE: MusicSource = 'netease';
@@ -167,6 +209,8 @@ const MusicPlayer = () => {
   const playRequestIdRef = useRef(0);
   const requestTimestampsRef = useRef<number[]>([]);
   const searchRequestIdRef = useRef(0);
+  const lyricDesktopRef = useRef<HTMLDivElement | null>(null);
+  const lyricMobileRef = useRef<HTMLDivElement | null>(null);
 
   const currentSong = currentSongIndex >= 0 ? musicList[currentSongIndex] : undefined;
 
@@ -197,6 +241,46 @@ const MusicPlayer = () => {
   const hasTranslationLyric = translationLyricLines.length > 0;
   const hasOriginalLyric = originalLyricLines.length > 0;
   const hasAnyLyric = displayLyricLines.length > 0 || hasTranslationLyric || hasOriginalLyric;
+  const activeLyricIndex = useMemo(() => {
+    if (displayLyricLines.length === 0) return -1;
+    let index = -1;
+    for (let i = 0; i < displayLyricLines.length; i += 1) {
+      const entry = displayLyricLines[i];
+      if (!Number.isFinite(entry.time)) continue;
+      if (entry.time <= currentTime + 0.25) {
+        index = i;
+      } else if (entry.time > currentTime + 0.25) {
+        break;
+      }
+    }
+    if (index === -1 && displayLyricLines.length > 0) {
+      const firstFinite = displayLyricLines.findIndex((entry) => Number.isFinite(entry.time));
+      if (firstFinite === -1) {
+        return 0;
+      }
+      return firstFinite;
+    }
+    return index;
+  }, [currentTime, displayLyricLines]);
+
+  const activeLyricKey = useMemo(() => {
+    if (activeLyricIndex < 0 || activeLyricIndex >= displayLyricLines.length) return null;
+    const entry = displayLyricLines[activeLyricIndex];
+    const timeKey = Number.isFinite(entry.time) ? entry.time.toFixed(3) : `idx-${activeLyricIndex}`;
+    return `${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${timeKey}`;
+  }, [activeLyricIndex, currentSong?.id, displayLyricLines, showTranslation]);
+
+  useEffect(() => {
+    if (!activeLyricKey) return;
+    const containers = [lyricDesktopRef.current, lyricMobileRef.current];
+    containers.forEach((container) => {
+      if (!container) return;
+      const target = container.querySelector<HTMLElement>(`[data-lyric-key="${activeLyricKey}"]`);
+      if (!target) return;
+      const offset = target.offsetTop - container.clientHeight / 2 + target.clientHeight / 2;
+      container.scrollTo({ top: Math.max(offset, 0), behavior: 'smooth' });
+    });
+  }, [activeLyricKey, lyricDesktopRef, lyricMobileRef]);
 
   const registerRequest = useCallback(() => {
     const now = Date.now();
@@ -613,6 +697,8 @@ const MusicPlayer = () => {
           bitrate: selectedBitrate,
           url: undefined,
           cover: picId ? undefined : null,
+          lyric: null,
+          tLyric: null,
         };
         return mappedTrack;
       });
@@ -622,6 +708,7 @@ const MusicPlayer = () => {
       setAllTracks(mapped);
       setMusicList(mapped);
       setShowingSearchResults(true);
+      setShowTranslation(false);
       setErrorMessage(mapped.length === 0 ? '未找到匹配的歌曲' : null);
     } catch (err) {
       if (searchRequestIdRef.current !== requestId) {
@@ -632,6 +719,7 @@ const MusicPlayer = () => {
       setAllTracks([]);
       setMusicList([]);
       setShowingSearchResults(true);
+      setShowTranslation(false);
     } finally {
       if (searchRequestIdRef.current === requestId) {
         setIsSearching(false);
@@ -648,6 +736,7 @@ const MusicPlayer = () => {
       setAllTracks(filtered);
       setMusicList(filtered);
       setShowingSearchResults(false);
+      setShowTranslation(false);
       setErrorMessage(null);
       resetPlayer();
       return;
@@ -669,6 +758,7 @@ const MusicPlayer = () => {
       setAllTracks(filtered);
       setMusicList(filtered);
       setShowingSearchResults(false);
+      setShowTranslation(false);
       setErrorMessage(null);
       resetPlayer();
     }
@@ -682,6 +772,7 @@ const MusicPlayer = () => {
       setAllTracks(filtered);
       setMusicList(filtered);
       setShowingSearchResults(false);
+      setShowTranslation(false);
       setErrorMessage(null);
       resetPlayer();
     }
@@ -1019,13 +1110,21 @@ const MusicPlayer = () => {
                       </button>
                     )}
                   </div>
-                  <div className="h-48 overflow-y-auto custom-scrollbar bg-white/60 border border-slate-200 rounded-xl p-4">
+                  <div ref={lyricDesktopRef} className="h-48 overflow-y-auto custom-scrollbar bg-white/60 border border-slate-200 rounded-xl p-4">
                     {hasAnyLyric && displayLyricLines.length > 0 ? (
-                      displayLyricLines.map((line, idx) => (
-                        <p key={`lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`} className="text-sm text-slate-700 leading-relaxed">
-                          {line}
-                        </p>
-                      ))
+                      displayLyricLines.map((line, idx) => {
+                        const isActive = idx === activeLyricIndex;
+                        const key = `lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`;
+                        return (
+                          <p
+                            key={key}
+                            data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
+                            className={`text-sm leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-semibold' : 'text-slate-700'}`}
+                          >
+                            {line.text}
+                          </p>
+                        );
+                      })
                     ) : (
                       <p className="text-sm text-slate-500">暂无歌词</p>
                     )}
@@ -1129,13 +1228,21 @@ const MusicPlayer = () => {
                       </button>
                     )}
                   </div>
-                  <div className="h-40 overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3">
+                  <div ref={lyricMobileRef} className="h-40 overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3">
                     {hasAnyLyric && displayLyricLines.length > 0 ? (
-                      displayLyricLines.map((line, idx) => (
-                        <p key={`lyric-mobile-${showTranslation ? 'trans' : 'orig'}-${idx}`} className="text-sm text-slate-700 leading-relaxed">
-                          {line}
-                        </p>
-                      ))
+                      displayLyricLines.map((line, idx) => {
+                        const isActive = idx === activeLyricIndex;
+                        const key = `lyric-mobile-${showTranslation ? 'trans' : 'orig'}-${idx}`;
+                        return (
+                          <p
+                            key={key}
+                            data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
+                            className={`text-sm leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-semibold' : 'text-slate-700'}`}
+                          >
+                            {line.text}
+                          </p>
+                        );
+                      })
                     ) : (
                       <p className="text-sm text-slate-500">暂无歌词</p>
                     )}

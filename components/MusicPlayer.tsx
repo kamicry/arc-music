@@ -3,13 +3,21 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Howl } from 'howler';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
-import { LOCAL_TRACKS, LocalTrack } from '../data/localTracks';
+import { LOCAL_TRACKS, LocalTrack, MusicSource } from '../data/localTracks';
 
 const MUSIC_API_BASE = 'https://music-api.gdstudio.xyz/api.php';
 const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 60;
 const DEFAULT_SEARCH_COUNT = 8;
 const DEFAULT_COVER_SIZE = '300';
+const BITRATE_OPTIONS = [128, 192, 320, 740, 999] as const;
+type BitrateOption = typeof BITRATE_OPTIONS[number];
+
+const AVAILABLE_SOURCES: { value: MusicSource; label: string }[] = [
+  { value: 'netease', label: '网易云' },
+  { value: 'kuwo', label: '酷我' },
+  { value: 'joox', label: 'JOOX' },
+];
 
 type SearchApiItem = {
   id: number | string;
@@ -49,6 +57,10 @@ function createTrack(track: LocalTrack): Track {
     cover: track.picId ? undefined : null,
   };
 }
+
+const DEFAULT_SOURCE: MusicSource = 'netease';
+const INITIAL_TRACKS: Track[] = LOCAL_TRACKS.map(createTrack);
+const INITIAL_SOURCE_TRACKS: Track[] = INITIAL_TRACKS.filter((track) => track.source === DEFAULT_SOURCE);
 
 function normalizeText(value: string | undefined | null): string {
   if (!value) return '';
@@ -117,8 +129,11 @@ const MusicPlayer = () => {
   const [volume, setVolume] = useState(0.7);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
-  const [allTracks, setAllTracks] = useState<Track[]>(() => LOCAL_TRACKS.map(createTrack));
-  const [musicList, setMusicList] = useState<Track[]>(() => LOCAL_TRACKS.map(createTrack));
+  const [localTracks, setLocalTracks] = useState<Track[]>(() => INITIAL_TRACKS);
+  const [selectedSource, setSelectedSource] = useState<MusicSource>(DEFAULT_SOURCE);
+  const [selectedBitrate, setSelectedBitrate] = useState<BitrateOption>(320);
+  const [allTracks, setAllTracks] = useState<Track[]>(() => INITIAL_SOURCE_TRACKS);
+  const [musicList, setMusicList] = useState<Track[]>(() => INITIAL_SOURCE_TRACKS);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   type PlaybackMode = 'order' | 'single' | 'shuffle';
@@ -126,6 +141,8 @@ const MusicPlayer = () => {
   const [mobileExpanded, setMobileExpanded] = useState(false);
   const [loadingTrackIndex, setLoadingTrackIndex] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showingSearchResults, setShowingSearchResults] = useState(false);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -133,6 +150,7 @@ const MusicPlayer = () => {
   const playbackModeRef = useRef<PlaybackMode>('order');
   const playRequestIdRef = useRef(0);
   const requestTimestampsRef = useRef<number[]>([]);
+  const searchRequestIdRef = useRef(0);
 
   const currentSong = currentSongIndex >= 0 ? musicList[currentSongIndex] : undefined;
 
@@ -161,12 +179,13 @@ const MusicPlayer = () => {
   }, [registerRequest]);
 
   const updateTrackInStates = useCallback((updated: Track) => {
+    setLocalTracks((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     setAllTracks((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     setMusicList((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
   }, []);
 
-  const ensureTrackResolved = useCallback(async (track: Track): Promise<Track> => {
-    if (track.url) {
+  const ensureTrackResolved = useCallback(async (track: Track, desiredBitrate: BitrateOption): Promise<Track> => {
+    if (track.url && track.bitrate === desiredBitrate) {
       return track;
     }
 
@@ -214,7 +233,7 @@ const MusicPlayer = () => {
       }
     }
 
-    const bitrateParam = track.bitrate ? String(track.bitrate) : '320';
+    const bitrateParam = String(desiredBitrate);
 
     const urlData = await callMusicApi<UrlApiResponse>({
       types: 'url',
@@ -256,13 +275,14 @@ const MusicPlayer = () => {
       name: resolvedName,
       album: resolvedAlbum,
       artist: resolvedArtist,
+      bitrate: desiredBitrate,
     };
 
     updateTrackInStates(resolvedTrack);
     return resolvedTrack;
   }, [callMusicApi, updateTrackInStates]);
 
-  const playSong = useCallback(async (index: number) => {
+  const playSong = useCallback(async (index: number, autoplay = true) => {
     if (index < 0 || index >= musicList.length) return;
     if (loadingTrackIndex !== null && loadingTrackIndex === index) return;
 
@@ -272,14 +292,23 @@ const MusicPlayer = () => {
     setIsPlaying(false);
 
     try {
-      const baseTrack = musicList[index];
-      if (!baseTrack) {
+      const originalTrack = musicList[index];
+      if (!originalTrack) {
         throw new Error('未找到歌曲');
       }
 
+      const needsNewBitrate = originalTrack.bitrate !== selectedBitrate;
+      const baseTrack: Track = {
+        ...originalTrack,
+        bitrate: selectedBitrate,
+        url: needsNewBitrate ? undefined : originalTrack.url,
+      };
+
+      updateTrackInStates(baseTrack);
+
       let resolvedTrack = baseTrack;
       if (!resolvedTrack.url) {
-        resolvedTrack = await ensureTrackResolved(baseTrack);
+        resolvedTrack = await ensureTrackResolved(baseTrack, selectedBitrate);
       }
 
       if (playRequestIdRef.current !== requestId) {
@@ -291,7 +320,7 @@ const MusicPlayer = () => {
         soundRef.current = null;
       }
 
-      autoPlayRef.current = true;
+      autoPlayRef.current = autoplay;
       setProgress(0);
       setCurrentTime(0);
       setDuration(0);
@@ -307,7 +336,7 @@ const MusicPlayer = () => {
         setLoadingTrackIndex(null);
       }
     }
-  }, [ensureTrackResolved, musicList, loadingTrackIndex]);
+  }, [ensureTrackResolved, musicList, loadingTrackIndex, selectedBitrate, updateTrackInStates]);
 
   const playNext = useCallback(() => {
     if (musicList.length === 0) return;
@@ -360,6 +389,21 @@ const MusicPlayer = () => {
     const previousIndex = currentSongIndex <= 0 ? musicList.length - 1 : currentSongIndex - 1;
     void playSong(previousIndex);
   }, [currentSongIndex, musicList, playSong]);
+
+  const resetPlayer = useCallback(() => {
+    playRequestIdRef.current += 1;
+    setLoadingTrackIndex(null);
+    if (soundRef.current) {
+      soundRef.current.unload();
+      soundRef.current = null;
+    }
+    setIsPlaying(false);
+    setCurrentSongIndex(-1);
+    setCoverUrl(null);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(0);
+  }, []);
 
   // 初始化音频
   useEffect(() => {
@@ -467,36 +511,127 @@ const MusicPlayer = () => {
     }
   };
 
-  // 搜索并更新当前播放列表
-  const handleSearch = () => {
-    const keyword = searchTerm.trim().toLowerCase();
+  const performSearch = useCallback(async (source: MusicSource, keyword: string) => {
+    const trimmedKeyword = keyword.trim();
+    if (!trimmedKeyword) return;
 
-    const filtered = keyword
-      ? allTracks.filter((track) => {
-          const nameMatch = track.name?.toLowerCase().includes(keyword);
-          const artistMatch = track.artist?.toLowerCase().includes(keyword);
-          const albumMatch = track.album?.toLowerCase().includes(keyword);
-          return Boolean(nameMatch || artistMatch || albumMatch);
-        })
-      : allTracks;
-
-    setMusicList(filtered);
-    playRequestIdRef.current += 1;
-    setLoadingTrackIndex(null);
+    const requestId = ++searchRequestIdRef.current;
+    resetPlayer();
+    setIsSearching(true);
     setErrorMessage(null);
 
-    if (soundRef.current) {
-      soundRef.current.unload();
-      soundRef.current = null;
+    try {
+      const searchResults = await callMusicApi<SearchApiItem[]>({
+        types: 'search',
+        source,
+        name: trimmedKeyword,
+        count: String(DEFAULT_SEARCH_COUNT),
+        pages: '1',
+      });
+      const list = Array.isArray(searchResults) ? searchResults : [];
+      const mapped: Track[] = list.map((item, index) => {
+        const rawId = item.id ?? `${trimmedKeyword}-${index}`;
+        const trackId = item.id !== undefined ? String(item.id) : undefined;
+        const picId = item.pic_id ? String(item.pic_id) : undefined;
+        const lyricId = item.lyric_id ? String(item.lyric_id) : trackId;
+        const artistText = Array.isArray(item.artist) ? item.artist.join(', ') : item.artist ?? '';
+        const mappedTrack: Track = {
+          id: `${source}-${rawId}`,
+          name: item.name ?? trimmedKeyword,
+          artist: artistText,
+          album: item.album ?? '',
+          duration: '',
+          source,
+          keyword: trimmedKeyword,
+          trackId,
+          picId,
+          lyricId,
+          bitrate: selectedBitrate,
+          url: undefined,
+          cover: picId ? undefined : null,
+        };
+        return mappedTrack;
+      });
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+      setAllTracks(mapped);
+      setMusicList(mapped);
+      setShowingSearchResults(true);
+      setErrorMessage(mapped.length === 0 ? '未找到匹配的歌曲' : null);
+    } catch (err) {
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+      const message = err instanceof Error ? err.message : '搜索失败，请稍后再试';
+      setErrorMessage(message);
+      setAllTracks([]);
+      setMusicList([]);
+      setShowingSearchResults(true);
+    } finally {
+      if (searchRequestIdRef.current === requestId) {
+        setIsSearching(false);
+      }
+    }
+  }, [callMusicApi, resetPlayer, selectedBitrate]);
+
+  const handleSearch = useCallback(async () => {
+    const keyword = searchTerm.trim();
+    if (!keyword) {
+      searchRequestIdRef.current += 1;
+      setIsSearching(false);
+      const filtered = localTracks.filter((track) => track.source === selectedSource);
+      setAllTracks(filtered);
+      setMusicList(filtered);
+      setShowingSearchResults(false);
+      setErrorMessage(null);
+      resetPlayer();
+      return;
     }
 
-    setIsPlaying(false);
-    setCurrentSongIndex(-1);
-    setCoverUrl(null);
-    setProgress(0);
-    setCurrentTime(0);
-    setDuration(0);
-  };
+    await performSearch(selectedSource, keyword);
+  }, [localTracks, performSearch, resetPlayer, searchTerm, selectedSource]);
+
+  const handleSourceChange = useCallback((source: MusicSource) => {
+    if (source === selectedSource) return;
+
+    setSelectedSource(source);
+    if (searchTerm.trim()) {
+      void performSearch(source, searchTerm.trim());
+    } else {
+      searchRequestIdRef.current += 1;
+      setIsSearching(false);
+      const filtered = localTracks.filter((track) => track.source === source);
+      setAllTracks(filtered);
+      setMusicList(filtered);
+      setShowingSearchResults(false);
+      setErrorMessage(null);
+      resetPlayer();
+    }
+  }, [localTracks, performSearch, resetPlayer, searchTerm, selectedSource]);
+
+  useEffect(() => {
+    if (searchTerm.trim() === '' && showingSearchResults) {
+      searchRequestIdRef.current += 1;
+      setIsSearching(false);
+      const filtered = localTracks.filter((track) => track.source === selectedSource);
+      setAllTracks(filtered);
+      setMusicList(filtered);
+      setShowingSearchResults(false);
+      setErrorMessage(null);
+      resetPlayer();
+    }
+  }, [localTracks, resetPlayer, searchTerm, selectedSource, showingSearchResults]);
+
+  useEffect(() => {
+    if (selectedBitrate <= 0) return;
+    if (currentSongIndex < 0) return;
+    if (loadingTrackIndex !== null) return;
+    const track = musicList[currentSongIndex];
+    if (!track) return;
+    if (track.bitrate === selectedBitrate && track.url) return;
+    void playSong(currentSongIndex, isPlaying);
+  }, [currentSongIndex, isPlaying, loadingTrackIndex, musicList, playSong, selectedBitrate]);
 
   // 进度条点击跳转
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -585,21 +720,63 @@ const MusicPlayer = () => {
           </div>
 
           <div className="p-3 md:p-6 border-b border-slate-200/60 shrink-0">
+            <div className="flex flex-wrap items-center gap-3 mb-3">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-slate-600">音源</span>
+                <div className="flex overflow-hidden rounded-lg border border-slate-300 bg-white/70">
+                  {AVAILABLE_SOURCES.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleSourceChange(value)}
+                      className={`px-3 py-1 text-sm transition-colors ${selectedSource === value ? 'bg-sky-500 text-white' : 'text-slate-600 hover:bg-white/60'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-medium text-slate-600">音质</span>
+                <select
+                  value={selectedBitrate}
+                  onChange={(e) => setSelectedBitrate(Number(e.target.value) as BitrateOption)}
+                  className="px-3 py-1 rounded-lg border border-slate-300 bg-white/70 text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400"
+                >
+                  {BITRATE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{`${option} kbps${option >= 740 ? ' (无损)' : ''}`}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="flex space-x-2">
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleSearch();
+                  }
+                }}
                 placeholder="搜索歌曲/歌手/专辑"
                 className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-sky-400 bg-white/70 text-slate-800 placeholder-slate-500"
               />
               <button
-                onClick={handleSearch}
-                className="px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md inline-flex items-center"
+                type="button"
+                onClick={() => { void handleSearch(); }}
+                disabled={isSearching}
+                className={`px-4 py-2 rounded-lg bg-gradient-to-r from-sky-400 to-blue-500 text-white hover:shadow-md inline-flex items-center justify-center ${isSearching ? 'opacity-80 cursor-not-allowed' : ''}`}
               >
-                <Search size={16} className="mr-1" />
-                搜索
+                {isSearching ? (
+                  <div className="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Search size={16} className="mr-1" />
+                    搜索
+                  </>
+                )}
               </button>
             </div>
             {errorMessage && (
@@ -609,7 +786,9 @@ const MusicPlayer = () => {
 
           <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
             {musicList.length === 0 && (
-              <div className="text-slate-600 text-sm">{allTracks.length === 0 ? '暂无音乐，请检查本地曲目配置。' : '未找到匹配的歌曲'}</div>
+              <div className="text-slate-600 text-sm">
+                {showingSearchResults ? (errorMessage ?? '未找到匹配的歌曲') : '暂无音乐，请检查本地曲目配置。'}
+              </div>
             )}
             {musicList.map((song, index) => (
               <div

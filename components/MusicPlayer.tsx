@@ -1018,7 +1018,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       <div className="absolute inset-0 -z-10">
         <div
           className="h-full w-full bg-center bg-cover scale-105 transform"
-          style={{ backgroundImage: "url('bg/4.jpeg')" }}
+          style={{ backgroundImage: "url('bg/5.jpg')" }}
         />
         <div className="absolute inset-0 bg-white/50" />
       </div>

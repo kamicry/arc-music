@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Howl } from 'howler';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search, MoreVertical } from 'lucide-react';
 import { LOCAL_TRACKS, LocalTrack, MusicSource } from '../data/localTracks';
 
 const MUSIC_API_BASE = 'https://music-api.gdstudio.xyz/api.php';
@@ -54,6 +54,7 @@ export type Track = LocalTrack & {
   cover?: string | null;
   lyric?: string | null;
   tLyric?: string | null;
+  fileSizeKb?: number | null;
 };
 
 function sanitizeUrl(url: string): string {
@@ -67,6 +68,7 @@ function createTrack(track: LocalTrack): Track {
     cover: track.picId ? undefined : null,
     lyric: null,
     tLyric: null,
+    fileSizeKb: null,
   };
 }
 
@@ -202,6 +204,14 @@ const MusicPlayer = () => {
   const [showingSearchResults, setShowingSearchResults] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
   const [lyricsExpanded, setLyricsExpanded] = useState(false);
+const [searchPage, setSearchPage] = useState(1);
+const [searchHasMore, setSearchHasMore] = useState(false);
+const [searchPageInput, setSearchPageInput] = useState('1');
+const [lastSearchKeyword, setLastSearchKeyword] = useState<string | null>(null);
+const [infoModalVisible, setInfoModalVisible] = useState(false);
+const [infoModalTrack, setInfoModalTrack] = useState<Track | null>(null);
+const [infoModalLoading, setInfoModalLoading] = useState(false);
+const [infoModalError, setInfoModalError] = useState<string | null>(null);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -212,6 +222,7 @@ const MusicPlayer = () => {
   const searchRequestIdRef = useRef(0);
   const lyricDesktopRef = useRef<HTMLDivElement | null>(null);
   const lyricMobileRef = useRef<HTMLDivElement | null>(null);
+  const infoRequestIdRef = useRef(0);
 
   const currentSong = currentSongIndex >= 0 ? musicList[currentSongIndex] : undefined;
 
@@ -364,7 +375,7 @@ const MusicPlayer = () => {
         source: track.source,
         name: keyword,
         count: String(DEFAULT_SEARCH_COUNT),
-        pages: '1',
+        pages: String(page),
       });
       const list = Array.isArray(searchResults) ? searchResults : [];
       const best = selectBestSearchResult(list, track);
@@ -443,6 +454,8 @@ const MusicPlayer = () => {
       }
     }
 
+    const fileSizeKb = typeof urlData.size === 'number' ? urlData.size : track.fileSizeKb ?? null;
+
     const resolvedTrack: Track = {
       ...track,
       url: resolvedUrl,
@@ -456,6 +469,7 @@ const MusicPlayer = () => {
       bitrate: desiredBitrate,
       lyric: lyricText,
       tLyric: translationText,
+      fileSizeKb,
     };
 
     updateTrackInStates(resolvedTrack);
@@ -482,6 +496,7 @@ const MusicPlayer = () => {
         ...originalTrack,
         bitrate: selectedBitrate,
         url: needsNewBitrate ? undefined : originalTrack.url,
+        fileSizeKb: needsNewBitrate ? null : originalTrack.fileSizeKb ?? null,
       };
 
       updateTrackInStates(baseTrack);
@@ -691,7 +706,7 @@ const MusicPlayer = () => {
     }
   };
 
-  const performSearch = useCallback(async (source: MusicSource, keyword: string) => {
+  const performSearch = useCallback(async (source: MusicSource, keyword: string, page = 1) => {
     const trimmedKeyword = keyword.trim();
     if (!trimmedKeyword) return;
 
@@ -706,7 +721,7 @@ const MusicPlayer = () => {
         source,
         name: trimmedKeyword,
         count: String(DEFAULT_SEARCH_COUNT),
-        pages: '1',
+        pages: String(page),
       });
       const list = Array.isArray(searchResults) ? searchResults : [];
       const mapped: Track[] = list.map((item, index) => {
@@ -731,6 +746,7 @@ const MusicPlayer = () => {
           cover: picId ? undefined : null,
           lyric: null,
           tLyric: null,
+          fileSizeKb: null,
         };
         return mappedTrack;
       });
@@ -741,6 +757,10 @@ const MusicPlayer = () => {
       setMusicList(mapped);
       setShowingSearchResults(true);
       setShowTranslation(false);
+      setLastSearchKeyword(trimmedKeyword);
+      setSearchPage(page);
+      setSearchPageInput(String(page));
+      setSearchHasMore(mapped.length === DEFAULT_SEARCH_COUNT);
       setErrorMessage(mapped.length === 0 ? '未找到匹配的歌曲' : null);
     } catch (err) {
       if (searchRequestIdRef.current !== requestId) {
@@ -752,6 +772,10 @@ const MusicPlayer = () => {
       setMusicList([]);
       setShowingSearchResults(true);
       setShowTranslation(false);
+      setLastSearchKeyword(trimmedKeyword);
+      setSearchPage(page);
+      setSearchPageInput(String(page));
+      setSearchHasMore(false);
     } finally {
       if (searchRequestIdRef.current === requestId) {
         setIsSearching(false);
@@ -770,19 +794,85 @@ const MusicPlayer = () => {
       setShowingSearchResults(false);
       setShowTranslation(false);
       setErrorMessage(null);
+      setSearchPage(1);
+      setSearchPageInput('1');
+      setSearchHasMore(false);
+      setLastSearchKeyword(null);
       resetPlayer();
       return;
     }
 
-    await performSearch(selectedSource, keyword);
+    setSearchPageInput('1');
+    await performSearch(selectedSource, keyword, 1);
   }, [localTracks, performSearch, resetPlayer, searchTerm, selectedSource]);
+
+  const handleSearchPagePrev = useCallback(() => {
+    if (!lastSearchKeyword) return;
+    if (searchPage <= 1) return;
+    void performSearch(selectedSource, lastSearchKeyword, Math.max(1, searchPage - 1));
+  }, [lastSearchKeyword, performSearch, searchPage, selectedSource]);
+
+  const handleSearchPageNext = useCallback(() => {
+    if (!lastSearchKeyword) return;
+    if (!searchHasMore) return;
+    void performSearch(selectedSource, lastSearchKeyword, searchPage + 1);
+  }, [lastSearchKeyword, performSearch, searchHasMore, searchPage, selectedSource]);
+
+  const handleSearchPageSubmit = useCallback(() => {
+    if (!lastSearchKeyword) return;
+    const pageValue = Number.parseInt(searchPageInput, 10);
+    if (!Number.isFinite(pageValue) || pageValue <= 0) return;
+    void performSearch(selectedSource, lastSearchKeyword, pageValue);
+  }, [lastSearchKeyword, performSearch, searchPageInput, selectedSource]);
+
+  const handleCloseInfoModal = useCallback(() => {
+    setInfoModalVisible(false);
+    setInfoModalTrack(null);
+    setInfoModalLoading(false);
+    setInfoModalError(null);
+  }, []);
+
+  const handleShowTrackInfo = useCallback(async (track: Track) => {
+    if (!track) return;
+    const requestId = ++infoRequestIdRef.current;
+    setInfoModalVisible(true);
+    setInfoModalLoading(true);
+    setInfoModalError(null);
+    setInfoModalTrack({ ...track });
+
+    try {
+      const desiredBitrate = (track.bitrate ?? selectedBitrate) as BitrateOption;
+      const resolved = await ensureTrackResolved({ ...track, bitrate: desiredBitrate }, desiredBitrate);
+      if (infoRequestIdRef.current !== requestId) {
+        return;
+      }
+      setInfoModalTrack({ ...resolved });
+    } catch (err) {
+      if (infoRequestIdRef.current !== requestId) {
+        return;
+      }
+      setInfoModalError(err instanceof Error ? err.message : '获取歌曲信息失败');
+    } finally {
+      if (infoRequestIdRef.current === requestId) {
+        setInfoModalLoading(false);
+      }
+    }
+  }, [ensureTrackResolved, selectedBitrate]);
+
+  const handleRetryInfo = useCallback(() => {
+    if (infoModalTrack) {
+      void handleShowTrackInfo(infoModalTrack);
+    }
+  }, [handleShowTrackInfo, infoModalTrack]);
+
 
   const handleSourceChange = useCallback((source: MusicSource) => {
     if (source === selectedSource) return;
 
     setSelectedSource(source);
     if (searchTerm.trim()) {
-      void performSearch(source, searchTerm.trim());
+      setSearchPageInput('1');
+      void performSearch(source, searchTerm.trim(), 1);
     } else {
       searchRequestIdRef.current += 1;
       setIsSearching(false);
@@ -792,6 +882,10 @@ const MusicPlayer = () => {
       setShowingSearchResults(false);
       setShowTranslation(false);
       setErrorMessage(null);
+      setSearchPage(1);
+      setSearchPageInput('1');
+      setSearchHasMore(false);
+      setLastSearchKeyword(null);
       resetPlayer();
     }
   }, [localTracks, performSearch, resetPlayer, searchTerm, selectedSource]);
@@ -849,6 +943,27 @@ const MusicPlayer = () => {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  const formatFileSizeLabel = (sizeKb?: number | null): string => {
+    if (!sizeKb || sizeKb <= 0) return '未知';
+    if (sizeKb >= 1024) {
+      const mb = sizeKb / 1024;
+      return `${mb >= 10 ? mb.toFixed(1) : mb.toFixed(2)} MB`;
+    }
+    return `${Math.max(Math.round(sizeKb), 1)} KB`;
+  };
+
+  const formatBitrateLabel = (value?: number | null): string => {
+    if (!value) return '未知';
+    const map: Record<number, string> = {
+      128: '128K 标准音质',
+      192: '192K 中高音质',
+      320: '320K 高品音质',
+      740: '740K 无损音质',
+      999: '999K 无损音质',
+    };
+    return map[value] ?? `${value}K`;
+  };
+
   const coverNodeSmall = (
     <div className="w-16 h-16 rounded-lg overflow-hidden bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center mr-4">
       {coverUrl ? (
@@ -880,6 +995,23 @@ const MusicPlayer = () => {
       )}
     </div>
   );
+
+  const infoTrack = infoModalTrack;
+  const infoSourceLabel = infoTrack
+    ? AVAILABLE_SOURCES.find((item) => item.value === infoTrack.source)?.label ?? infoTrack.source
+    : '';
+  const lyricLink = infoTrack && (infoTrack.lyricId ?? infoTrack.trackId)
+    ? `${MUSIC_API_BASE}?types=lyric&source=${infoTrack.source}&id=${infoTrack.lyricId ?? infoTrack.trackId}`
+    : null;
+  const coverLink = infoTrack?.cover
+    ? infoTrack.cover
+    : infoTrack?.picId
+    ? `${MUSIC_API_BASE}?types=pic&source=${infoTrack.source}&id=${infoTrack.picId}&size=${DEFAULT_COVER_SIZE}`
+    : null;
+  const audioLink = infoTrack?.url ?? null;
+  const fileSizeLabel = formatFileSizeLabel(infoTrack?.fileSizeKb);
+  const bitrateLabel = formatBitrateLabel(infoTrack?.bitrate);
+  const durationLabel = infoTrack?.duration && infoTrack.duration.trim() ? infoTrack.duration : '未知';
 
   return (
     <div className="relative min-h-screen text-slate-800">
@@ -972,6 +1104,47 @@ const MusicPlayer = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
+          {showingSearchResults && (
+            <div className="flex flex-wrap items-center justify-between mb-3 pr-2 text-sm text-slate-600">
+              <div className="flex items-center space-x-2">
+                <span>页码</span>
+                <button
+                  onClick={handleSearchPagePrev}
+                  className={`px-3 py-1 rounded-md border text-xs transition-colors ${isSearching || !lastSearchKeyword || searchPage <= 1 ? 'text-slate-400 border-slate-200 cursor-not-allowed' : 'text-slate-600 border-slate-300 hover:bg-white'}`}
+                  disabled={isSearching || !lastSearchKeyword || searchPage <= 1}
+                >
+                  上一页
+                </button>
+                <div className="flex items-center space-x-1">
+                  <input
+                    type="number"
+                    min={1}
+                    value={searchPageInput}
+                    onChange={(e) => setSearchPageInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchPageSubmit(); } }}
+                    className="w-16 px-2 py-1 rounded-md border border-slate-300 bg-white/80 focus:outline-none focus:ring-2 focus:ring-sky-400 text-sm"
+                    disabled={!lastSearchKeyword}
+                  />
+                  <button
+                    onClick={handleSearchPageSubmit}
+                    className={`px-3 py-1 rounded-md border text-xs transition-colors ${isSearching || !lastSearchKeyword ? 'text-slate-400 border-slate-200 cursor-not-allowed' : 'text-slate-600 border-slate-300 hover:bg-white'}`}
+                    disabled={isSearching || !lastSearchKeyword}
+                  >
+                    跳转
+                  </button>
+                </div>
+                <button
+                  onClick={handleSearchPageNext}
+                  className={`px-3 py-1 rounded-md border text-xs transition-colors ${isSearching || !lastSearchKeyword || !searchHasMore ? 'text-slate-400 border-slate-200 cursor-not-allowed' : 'text-slate-600 border-slate-300 hover:bg-white'}`}
+                  disabled={isSearching || !lastSearchKeyword || !searchHasMore}
+                >
+                  下一页
+                </button>
+                <span className="text-xs text-slate-500">第 {searchPage} 页</span>
+              </div>
+              <span className="text-xs text-slate-400">每页 {DEFAULT_SEARCH_COUNT} 条</span>
+            </div>
+          )}
             {musicList.length === 0 && (
               <div className="text-slate-600 text-sm">
                 {showingSearchResults ? (errorMessage ?? '未找到匹配的歌曲') : '暂无音乐，请检查本地曲目配置。'}
@@ -1020,6 +1193,12 @@ const MusicPlayer = () => {
                 </div>
 
                 <div className="flex items-center space-x-3">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); void handleShowTrackInfo(song); }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-slate-600 transition-all duration-300"
+                  >
+                    <MoreVertical size={16} />
+                  </button>
                   <button className="opacity-0 group-hover:opacity-100 hover:text-sky-600 transition-all duration-300">
                     <Heart size={16} />
                   </button>
@@ -1049,6 +1228,13 @@ const MusicPlayer = () => {
             <div className="flex items-center space-x-4 text-slate-600">
               <button className="p-2 hover:text-slate-800 transition-colors">
                 <Heart size={20} />
+              </button>
+              <button
+                onClick={() => { if (currentSong) { void handleShowTrackInfo(currentSong); } }}
+                className="p-2 hover:text-slate-800 transition-colors disabled:opacity-40"
+                disabled={!currentSong}
+              >
+                <MoreVertical size={20} />
               </button>
               <button
                 onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
@@ -1258,6 +1444,13 @@ const MusicPlayer = () => {
                 <Heart size={20} />
               </button>
               <button
+                onClick={() => { if (currentSong) { void handleShowTrackInfo(currentSong); } }}
+                className="p-2 hover:text-slate-800 transition-colors disabled:opacity-40"
+                disabled={!currentSong}
+              >
+                <MoreVertical size={20} />
+              </button>
+              <button
                 onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
                 className="p-2 hover:text-slate-800 transition-colors disabled:opacity-50"
                 disabled={!currentSong?.url}
@@ -1404,6 +1597,67 @@ const MusicPlayer = () => {
             </div>
           </div>
         </div>
+      {infoModalVisible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4" onClick={handleCloseInfoModal}>
+          <div
+            className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={handleCloseInfoModal}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              关闭
+            </button>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">歌曲信息</h3>
+            {infoModalLoading ? (
+              <div className="flex items-center justify-center py-10">
+                <div className="w-6 h-6 border-2 border-slate-300 border-t-sky-500 rounded-full animate-spin" />
+              </div>
+            ) : infoModalError ? (
+              <div className="space-y-4 text-sm text-slate-600">
+                <p>{infoModalError}</p>
+                <div className="flex items-center space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleRetryInfo}
+                    className="px-3 py-1.5 rounded-md bg-sky-500 text-white text-xs hover:bg-sky-600 transition-colors"
+                  >
+                    重试
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCloseInfoModal}
+                    className="px-3 py-1.5 rounded-md border border-slate-300 text-xs text-slate-600 hover:bg-white"
+                  >
+                    关闭
+                  </button>
+                </div>
+              </div>
+            ) : infoTrack ? (
+              <div className="space-y-3 text-sm text-slate-700">
+                <p>歌名：{infoTrack.name}</p>
+                <p>歌手：{infoTrack.artist || '未知'}</p>
+                <p>专辑：{infoTrack.album || '未知'}</p>
+                <p>时长：{durationLabel}</p>
+                <p>来源：{infoSourceLabel}{infoSourceLabel && infoSourceLabel !== infoTrack.source ? `（${infoTrack.source}）` : ''}</p>
+                <p>歌曲ID：{infoTrack.trackId ?? '未知'}</p>
+                <p>文件大小：{fileSizeLabel}</p>
+                <p>播放音质：{bitrateLabel}</p>
+                <div className="space-y-1">
+                  <p>歌词链接：{lyricLink ? (<a className="text-sky-600 hover:underline" href={lyricLink} target="_blank" rel="noreferrer">点击下载</a>) : '暂无'}</p>
+                  <p>封面链接：{coverLink ? (<a className="text-sky-600 hover:underline" href={coverLink} target="_blank" rel="noreferrer">查看封面</a>) : '暂无'}</p>
+                  <p>歌曲链接：{audioLink ? (<a className="text-sky-600 hover:underline break-all" href={audioLink} target="_blank" rel="noreferrer">{audioLink}</a>) : '暂无'}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-600">暂无歌曲信息</p>
+            )}
+          </div>
+        </div>
+      )}
+
       </div>
     </div>
   );

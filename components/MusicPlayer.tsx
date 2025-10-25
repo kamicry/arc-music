@@ -220,6 +220,7 @@ const MusicPlayer = () => {
 
   useEffect(() => {
     setShowTranslation(false);
+    setLyricsExpanded(false);
   }, [currentSong?.id]);
 
   const originalLyricLines = useMemo(() => parseLyricLines(currentSong?.lyric), [currentSong?.lyric]);
@@ -270,17 +271,43 @@ const MusicPlayer = () => {
     return `${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${timeKey}`;
   }, [activeLyricIndex, currentSong?.id, displayLyricLines, showTranslation]);
 
+  const previewLyricLines = useMemo(() => {
+    if (displayLyricLines.length === 0) return [] as { index: number; line: LyricLine }[];
+    const baseIndex = activeLyricIndex >= 0 && activeLyricIndex < displayLyricLines.length ? activeLyricIndex : 0;
+    const indices = new Set<number>();
+    if (displayLyricLines[baseIndex]) indices.add(baseIndex);
+    if (baseIndex > 0) indices.add(baseIndex - 1);
+    if (baseIndex + 1 < displayLyricLines.length) indices.add(baseIndex + 1);
+    if (indices.size === 0) {
+      indices.add(0);
+    }
+    return Array.from(indices)
+      .sort((a, b) => a - b)
+      .map((index) => ({ index, line: displayLyricLines[index] }));
+  }, [activeLyricIndex, displayLyricLines]);
+
   useEffect(() => {
     if (!activeLyricKey) return;
-    const containers = [lyricDesktopRef.current, lyricMobileRef.current];
+    if (!lyricsExpanded && !mobileExpanded) return;
+    const containers: (HTMLDivElement | null)[] = [];
+    if (lyricsExpanded) {
+      containers.push(lyricDesktopRef.current);
+    }
+    if (lyricsExpanded && mobileExpanded) {
+      containers.push(lyricMobileRef.current);
+    }
     containers.forEach((container) => {
       if (!container) return;
       const target = container.querySelector<HTMLElement>(`[data-lyric-key="${activeLyricKey}"]`);
       if (!target) return;
       const offset = target.offsetTop - container.clientHeight / 2 + target.clientHeight / 2;
-      container.scrollTo({ top: Math.max(offset, 0), behavior: 'smooth' });
+      if (typeof container.scrollTo === 'function') {
+        container.scrollTo({ top: Math.max(offset, 0), behavior: 'smooth' });
+      } else {
+        container.scrollTop = Math.max(offset, 0);
+      }
     });
-  }, [activeLyricKey, lyricDesktopRef, lyricMobileRef]);
+  }, [activeLyricKey, lyricDesktopRef, lyricMobileRef, lyricsExpanded, mobileExpanded]);
 
   const registerRequest = useCallback(() => {
     const now = Date.now();
@@ -1031,35 +1058,104 @@ const MusicPlayer = () => {
           {/* 播放器内容 */}
           <div className="flex-1 flex items-center justify-center p-4 md:p-6">
             <div className="flex flex-col items-center w-full max-w-4xl">
-              {/* 专辑封面和歌曲信息 */}
-              <div className="flex items-center justify-center mb-4 md:mb-8 w-full">
-                <div className="flex items-center space-x-4 md:space-x-6">
-                  {coverNodeLarge}
+              {!lyricsExpanded && (
+                <div className="flex items-center justify-center w-full -mt-6 md:-mt-10 mb-4 md:mb-6">
+                  <div className="flex items-center space-x-4 md:space-x-6">
+                    {coverNodeLarge}
 
-                  {/* 歌曲信息 */}
-                  <div className="text-left max-w-xs">
-                    <h2 className="text-2xl font-bold mb-2 text-slate-900">{currentSong?.name ?? '未选择'}</h2>
-                    <p className="text-lg text-slate-700 mb-1">{currentSong?.artist ?? ''}</p>
-                    <p className="text-slate-500">{currentSong?.album ?? ''}</p>
+                    <div className="text-left max-w-xs">
+                      <h2 className="text-2xl font-bold mb-2 text-slate-900">{currentSong?.name ?? '未选择'}</h2>
+                      <p className="text-lg text-slate-700 mb-1">{currentSong?.artist ?? ''}</p>
+                      <p className="text-slate-500">{currentSong?.album ?? ''}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* 进度条 */}
-              <div className="w-full max-w-2xl mb-4 md:mb-6">
-                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
-                  <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
-                    <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
+              {hasAnyLyric && (
+                <div className={`w-full max-w-2xl ${lyricsExpanded ? 'mb-4 md:mb-6 mt-2 md:mt-4' : 'mb-4 md:mb-6'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-slate-600">歌词</span>
+                    <div className="flex items-center space-x-2">
+                      {hasTranslationLyric && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTranslation((prev) => !prev)}
+                          className="text-xs px-2 py-1 rounded-md border border-sky-400 text-sky-600 hover:bg-sky-50 transition-colors"
+                        >
+                          {showTranslation ? '查看原文' : '查看翻译'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setLyricsExpanded((prev) => !prev)}
+                        className="text-xs px-2 py-1 rounded-md border border-slate-300 text-slate-600 hover:bg-white/70 transition-colors"
+                      >
+                        {lyricsExpanded ? '收起歌词' : '展开歌词'}
+                      </button>
+                    </div>
+                  </div>
+                  {lyricsExpanded ? (
+                    <div
+                      ref={lyricsExpanded ? lyricDesktopRef : undefined}
+                      className="h-[360px] md:h-[420px] overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-4"
+                    >
+                      {displayLyricLines.length > 0 ? (
+                        displayLyricLines.map((line, idx) => {
+                          const isActive = idx === activeLyricIndex;
+                          const key = `lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`;
+                          return (
+                            <p
+                              key={key}
+                              data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
+                              className={`leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-bold text-lg' : 'text-slate-700 text-base'}`}
+                            >
+                              {line.text}
+                            </p>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-500">暂无歌词</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-white/70 border border-slate-200 rounded-xl p-4">
+                      {previewLyricLines.length > 0 ? (
+                        previewLyricLines.map(({ index, line }) => {
+                          const isActive = index === activeLyricIndex;
+                          const key = `lyric-preview-${showTranslation ? 'trans' : 'orig'}-${index}`;
+                          return (
+                            <p
+                              key={key}
+                              className={`leading-relaxed text-center transition-all ${isActive ? 'text-sky-600 font-semibold text-lg' : 'text-slate-600 text-sm'}`}
+                            >
+                              {line.text}
+                            </p>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-500">暂无歌词</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!lyricsExpanded && (
+                <div className="w-full max-w-2xl mb-4 md:mb-6">
+                  <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
+                    <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
+                      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-600 mt-2">
+                    <span>{formatTime(currentTime)}</span>
+                    <span>{formatTime(duration)}</span>
                   </div>
                 </div>
-                <div className="flex justify-between text-sm text-slate-600 mt-2">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(duration)}</span>
-                </div>
-              </div>
+              )}
 
-              {/* 控制按钮 */}
-              <div className="flex items-center justify-center space-x-6 mb-2 md:mb-6">
+              <div className={`flex items-center justify-center space-x-6 ${lyricsExpanded ? 'mb-3 md:mb-5' : 'mb-2 md:mb-6'}`}>
                 <button
                   onClick={() => {
                     if (musicList.length === 0) return;
@@ -1095,42 +1191,6 @@ const MusicPlayer = () => {
                   {playbackMode === 'single' ? <Repeat1 size={20} /> : playbackMode === 'shuffle' ? <Shuffle size={20} /> : <Repeat size={20} />}
                 </button>
               </div>
-
-              {currentSong && (
-                <div className="w-full max-w-2xl mb-4 md:mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-semibold text-slate-600">歌词</span>
-                    {hasTranslationLyric && (
-                      <button
-                        type="button"
-                        onClick={() => setShowTranslation((prev) => !prev)}
-                        className="text-xs px-2 py-1 rounded-md border border-sky-400 text-sky-600 hover:bg-sky-50 transition-colors"
-                      >
-                        {showTranslation ? '查看原文' : '查看翻译'}
-                      </button>
-                    )}
-                  </div>
-                  <div ref={lyricDesktopRef} className="h-48 overflow-y-auto custom-scrollbar bg-white/60 border border-slate-200 rounded-xl p-4">
-                    {hasAnyLyric && displayLyricLines.length > 0 ? (
-                      displayLyricLines.map((line, idx) => {
-                        const isActive = idx === activeLyricIndex;
-                        const key = `lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`;
-                        return (
-                          <p
-                            key={key}
-                            data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
-                            className={`text-sm leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-semibold' : 'text-slate-700'}`}
-                          >
-                            {line.text}
-                          </p>
-                        );
-                      })
-                    ) : (
-                      <p className="text-sm text-slate-500">暂无歌词</p>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* 音量控制 */}
               <div className="flex items-center justify-center space-x-4">
@@ -1177,7 +1237,7 @@ const MusicPlayer = () => {
         <div
           className={`md:hidden fixed inset-x-0 bottom-0 z-40 h-[50vh] bg-white/90 backdrop-blur rounded-t-2xl shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
         >
-          <div className="flex items-center justify-between p-4 border-b border-slate-200/70">
+          <div className={`flex items-center justify-between p-4 border-b border-slate-200/70 ${lyricsExpanded ? 'hidden' : ''}`}>
             <div className="flex items-center">
               {coverNodeSmall}
               <div>
@@ -1202,51 +1262,87 @@ const MusicPlayer = () => {
             </div>
           </div>
           <div className="flex-1 flex items-center justify-center p-4">
-            <div className="flex flex-col items-center w-full">
-              <div className="w-full mb-3">
-                <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
-                  <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
-                    <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
+            <div className="flex flex-col items-center w-full h-full">
+              {!lyricsExpanded && (
+                <div className="w-full mb-3">
+                  <div className="h-2 bg-slate-300 rounded-full cursor-pointer group overflow-hidden" onClick={handleProgressClick}>
+                    <div className="h-full bg-gradient-to-r from-sky-400 to-blue-500 rounded-full transition-all duration-300 relative" style={{ width: `${progress}%` }}>
+                      <div className="absolute right-0 top-1/2 transform -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-lg" />
+                    </div>
+                  </div>
+                  <div className="flex justify-between text-sm text-slate-600 mt-2">
+                    <span>{formatTime(currentTime)}</span>
+                    <span>{formatTime(duration)}</span>
                   </div>
                 </div>
-                <div className="flex justify-between text-sm text-slate-600 mt-2">
-                  <span>{formatTime(currentTime)}</span>
-                  <span>{formatTime(duration)}</span>
-                </div>
-              </div>
-              {currentSong && (
-                <div className="w-full mb-3">
+              )}
+
+              {hasAnyLyric && (
+                <div className={`w-full ${lyricsExpanded ? 'flex-1 flex flex-col mb-3' : 'mb-3'}`}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-semibold text-slate-600">歌词</span>
-                    {hasTranslationLyric && (
+                    <div className="flex items-center space-x-2">
+                      {hasTranslationLyric && (
+                        <button
+                          type="button"
+                          onClick={() => setShowTranslation((prev) => !prev)}
+                          className="text-xs px-2 py-1 rounded-md border border-sky-400 text-sky-600 hover:bg-sky-50 transition-colors"
+                        >
+                          {showTranslation ? '查看原文' : '查看翻译'}
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => setShowTranslation((prev) => !prev)}
-                        className="text-xs px-2 py-1 rounded-md border border-sky-400 text-sky-600 hover:bg-sky-50 transition-colors"
+                        onClick={() => setLyricsExpanded((prev) => !prev)}
+                        className="text-xs px-2 py-1 rounded-md border border-slate-300 text-slate-600 hover:bg-white/70 transition-colors"
                       >
-                        {showTranslation ? '查看原文' : '查看翻译'}
+                        {lyricsExpanded ? '收起歌词' : '展开歌词'}
                       </button>
-                    )}
+                    </div>
                   </div>
-                  <div ref={lyricMobileRef} className="h-40 overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3">
-                    {hasAnyLyric && displayLyricLines.length > 0 ? (
-                      displayLyricLines.map((line, idx) => {
-                        const isActive = idx === activeLyricIndex;
-                        const key = `lyric-mobile-${showTranslation ? 'trans' : 'orig'}-${idx}`;
-                        return (
-                          <p
-                            key={key}
-                            data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
-                            className={`text-sm leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-semibold' : 'text-slate-700'}`}
-                          >
-                            {line.text}
-                          </p>
-                        );
-                      })
-                    ) : (
-                      <p className="text-sm text-slate-500">暂无歌词</p>
-                    )}
-                  </div>
+                  {lyricsExpanded ? (
+                    <div
+                      ref={lyricsExpanded && mobileExpanded ? lyricMobileRef : undefined}
+                      className="flex-1 min-h-[180px] overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3"
+                    >
+                      {displayLyricLines.length > 0 ? (
+                        displayLyricLines.map((line, idx) => {
+                          const isActive = idx === activeLyricIndex;
+                          const key = `lyric-mobile-${showTranslation ? 'trans' : 'orig'}-${idx}`;
+                          return (
+                            <p
+                              key={key}
+                              data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
+                              className={`leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-bold text-base' : 'text-slate-700 text-sm'}`}
+                            >
+                              {line.text}
+                            </p>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-500">暂无歌词</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-white/70 border border-slate-200 rounded-xl p-3">
+                      {previewLyricLines.length > 0 ? (
+                        previewLyricLines.map(({ index, line }) => {
+                          const isActive = index === activeLyricIndex;
+                          const key = `lyric-preview-mobile-${showTranslation ? 'trans' : 'orig'}-${index}`;
+                          return (
+                            <p
+                              key={key}
+                              className={`leading-relaxed text-center transition-all ${isActive ? 'text-sky-600 font-semibold text-base' : 'text-slate-600 text-sm'}`}
+                            >
+                              {line.text}
+                            </p>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-500">暂无歌词</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

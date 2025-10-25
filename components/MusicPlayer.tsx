@@ -1066,7 +1066,7 @@ const MusicPlayer = () => {
             <div className="flex flex-col items-center w-full max-w-4xl h-full">
               <div className="flex-1 w-full flex flex-col items-center overflow-hidden">
                 {!lyricsExpanded && (
-                  <div className="flex items-center justify-center w-full -mt-8 md:-mt-12 mb-4 md:mb-6">
+                  <div className="flex items-center justify-center w-full -mt-2 md:-mt-4 mb-4 md:mb-6">
                     <div className="flex items-center space-x-4 md:space-x-6">
                       {coverNodeLarge}
 
@@ -1109,7 +1109,7 @@ const MusicPlayer = () => {
                     {lyricsExpanded ? (
                       <div
                         ref={lyricDesktopRef}
-                        className="flex-1 overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-4"
+                        className="flex-1 overflow-y-auto max-h-[280px] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-4"
                       >
                         {displayLyricLines.length > 0 ? (
                           displayLyricLines.map((line, idx) => {
@@ -1244,7 +1244,7 @@ const MusicPlayer = () => {
           </div>
         </div>
         <div
-          className={`md:hidden fixed inset-x-0 bottom-0 z-40 ${lyricsExpanded ? 'h-[85vh]' : 'h-[50vh]'} bg-white/90 backdrop-blur rounded-t-2xl shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
+          className={`md:hidden fixed inset-0 z-40 bg-white/90 backdrop-blur ${mobileExpanded ? 'rounded-none' : 'rounded-t-2xl'} shadow-2xl flex flex-col overflow-hidden transform transition-transform duration-300 ease-in-out ${mobileExpanded ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
         >
           <div className={`flex items-center justify-between p-4 border-b border-slate-200/70 ${lyricsExpanded ? 'hidden' : ''}`}>
             <div className="flex items-center">
@@ -1297,8 +1297,8 @@ const MusicPlayer = () => {
                   </div>
                   {lyricsExpanded ? (
                     <div
-                      ref={lyricsExpanded ? lyricMobileRef : undefined}
-                      className="flex-1 overflow-y-auto custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3"
+                      ref={lyricMobileRef}
+                      className="flex-1 overflow-y-auto max-h-[280px] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-3"
                     >
                       {displayLyricLines.length > 0 ? (
                         displayLyricLines.map((line, idx) => {

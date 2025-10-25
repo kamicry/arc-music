@@ -15,52 +15,60 @@ export type LocalTrack = {
 };
 
 export const LOCAL_TRACKS: LocalTrack[] = [
-    {
-        "id": 1867150097,
-        "name": "夏霞",
-        "artist": "あたらよ",
-        "album": "夏霞",
-        "source": "netease",
-        "url_id": 1867150097,
-        "pic_id": "109951166253940594",
-        "lyric_id": 1867150097,
-        "pic": null,
-        "url": null
-    },
-    {
-        "id": 1835951859,
-        "name": "Avid",
-        "artist": "SawanoHiroyuki[nZk], 瑞葵(mizuki)",
-        "album": "Avid / Hands Up to the Sky",
-        "source": "netease",
-        "url_id": 1835951859,
-        "pic_id": "109951166004106688",
-        "lyric_id": 1835951859,
-        "pic": null,
-        "url": null
-    },
-    {
-        "id": 554245242,
-        "name": "Cage",
-        "artist": "Tielle, SawanoHiroyuki[nZk]",
-        "album": "Binary Star/Cage",
-        "source": "netease",
-        "url_id": 554245242,
-        "pic_id": "109951166200369055",
-        "lyric_id": 554245242,
-        "pic": null,
-        "url": null
-    },
-    {
-        "id": 2051328176,
-        "name": "僕らはそれを愛と呼んだ",
-        "artist": "あたらよ",
-        "album": "僕らはそれを愛と呼んだ",
-        "source": "netease",
-        "url_id": 2051328176,
-        "pic_id": "109951168645551891",
-        "lyric_id": 2051328176,
-        "pic": null,
-        "url": null
-    }
+    [
+  {
+    "id": "netease-1867150097",
+    "name": "夏霞",
+    "artist": "あたらよ",
+    "album": "夏霞",
+    "duration": null,
+    "source": "netease",
+    "keyword": "夏霞 あたらよ",
+    "trackId": "1867150097",
+    "picId": "109951166253940594",
+    "lyricId": "1867150097",
+    "bitrate": 320
+  },
+  {
+    "id": "netease-1835951859",
+    "name": "Avid",
+    "artist": "SawanoHiroyuki[nZk], 瑞葵(mizuki)",
+    "album": "Avid / Hands Up to the Sky",
+    "duration": null,
+    "source": "netease",
+    "keyword": "Avid SawanoHiroyuki[nZk], 瑞葵(mizuki)",
+    "trackId": "1835951859",
+    "picId": "109951166004106688",
+    "lyricId": "1835951859",
+    "bitrate": 320
+  },
+  {
+    "id": "netease-554245242",
+    "name": "Cage",
+    "artist": "Tielle, SawanoHiroyuki[nZk]",
+    "album": "Binary Star/Cage",
+    "duration": null,
+    "source": "netease",
+    "keyword": "Cage Tielle, SawanoHiroyuki[nZk]",
+    "trackId": "554245242",
+    "picId": "109951166200369055",
+    "lyricId": "554245242",
+    "bitrate": 320
+  },
+  {
+    "id": "netease-2051328176",
+    "name": "僕らはそれを愛と呼んだ",
+    "artist": "あたらよ",
+    "album": "僕らはそれを愛と呼んだ",
+    "duration": null,
+    "source": "netease",
+    "keyword": "僕らはそれを愛と呼んだ あたらよ",
+    "trackId": "2051328176",
+    "picId": "109951168645551891",
+    "lyricId": "2051328176",
+    "bitrate": 320
+  }
+]
+
 ];
+

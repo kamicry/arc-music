@@ -226,7 +226,7 @@ const MusicPlayer = () => {
 
   const originalLyricLines = useMemo(() => parseLyricLines(currentSong?.lyric), [currentSong?.lyric]);
   const translationLyricLines = useMemo(() => parseLyricLines(currentSong?.tLyric), [currentSong?.tLyric]);
-  const displayLyricLines = useMemo(() => {
+  const displayLyricLines = useMemo<LyricLine[]>(() => {
     const hasTranslation = translationLyricLines.length > 0;
     const hasOriginal = originalLyricLines.length > 0;
     if (showTranslation && hasTranslation) {
@@ -238,7 +238,7 @@ const MusicPlayer = () => {
     if (hasTranslation) {
       return translationLyricLines;
     }
-    return [] as string[];
+    return [] as LyricLine[];
   }, [originalLyricLines, showTranslation, translationLyricLines]);
   const hasTranslationLyric = translationLyricLines.length > 0;
   const hasOriginalLyric = originalLyricLines.length > 0;

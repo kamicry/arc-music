@@ -868,10 +868,10 @@ const MusicPlayer = () => {
   );
 
   const coverNodeLarge = (
-    <div className="w-56 h-56 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
+    <div className="w-56 h-56 md:w-64 md:h-64 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={coverUrl} alt="cover" className="w-full h-full object-cover" />
+        <img src={coverUrl} alt="cover" className="w-full h-full object-contain bg-slate-900/10" />
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-sky-400 via-blue-400 to-cyan-400 flex items-center justify-center">
           <div className="text-white text-center">
@@ -1073,7 +1073,7 @@ const MusicPlayer = () => {
                       <div className="text-left max-w-xs">
                         <h2 className="text-2xl font-bold mb-2 text-slate-900">{currentSong?.name ?? '未选择'}</h2>
                         <p className="text-lg text-slate-700 mb-1">{currentSong?.artist ?? ''}</p>
-                        <p className="text-slate-500">{currentSong?.album ?? ''}</p>
+                        {currentSong?.album ? <p className="text-sm text-slate-500">{currentSong.album}</p> : null}
                       </div>
                     </div>
                   </div>

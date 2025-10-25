@@ -15,7 +15,7 @@ export type LocalTrack = {
 };
 
 export const LOCAL_TRACKS: LocalTrack[] = [
-    [
+    
   {
     "id": "netease-1867150097",
     "name": "夏霞",
@@ -68,7 +68,8 @@ export const LOCAL_TRACKS: LocalTrack[] = [
     "lyricId": "2051328176",
     "bitrate": 320
   }
-]
+
 
 ];
+
 

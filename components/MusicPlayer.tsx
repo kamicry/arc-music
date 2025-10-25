@@ -201,6 +201,7 @@ const MusicPlayer = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [showingSearchResults, setShowingSearchResults] = useState(false);
   const [showTranslation, setShowTranslation] = useState(false);
+  const [lyricsExpanded, setLyricsExpanded] = useState(false);
 
   const soundRef = useRef<Howl | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);

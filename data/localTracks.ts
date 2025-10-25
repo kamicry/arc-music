@@ -21,7 +21,7 @@ export const LOCAL_TRACKS: LocalTrack[] = [
     "name": "夏霞",
     "artist": "あたらよ",
     "album": "夏霞",
-    "duration": null,
+
     "source": "netease",
     "keyword": "夏霞 あたらよ",
     "trackId": "1867150097",
@@ -34,7 +34,7 @@ export const LOCAL_TRACKS: LocalTrack[] = [
     "name": "Avid",
     "artist": "SawanoHiroyuki[nZk], 瑞葵(mizuki)",
     "album": "Avid / Hands Up to the Sky",
-    "duration": null,
+
     "source": "netease",
     "keyword": "Avid SawanoHiroyuki[nZk], 瑞葵(mizuki)",
     "trackId": "1835951859",
@@ -47,7 +47,7 @@ export const LOCAL_TRACKS: LocalTrack[] = [
     "name": "Cage",
     "artist": "Tielle, SawanoHiroyuki[nZk]",
     "album": "Binary Star/Cage",
-    "duration": null,
+
     "source": "netease",
     "keyword": "Cage Tielle, SawanoHiroyuki[nZk]",
     "trackId": "554245242",
@@ -60,7 +60,7 @@ export const LOCAL_TRACKS: LocalTrack[] = [
     "name": "僕らはそれを愛と呼んだ",
     "artist": "あたらよ",
     "album": "僕らはそれを愛と呼んだ",
-    "duration": null,
+
     "source": "netease",
     "keyword": "僕らはそれを愛と呼んだ あたらよ",
     "trackId": "2051328176",
@@ -71,5 +71,6 @@ export const LOCAL_TRACKS: LocalTrack[] = [
 
 
 ];
+
 
 

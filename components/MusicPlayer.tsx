@@ -922,7 +922,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
     }
   }, [localTracks, performSearch, resetPlayer, searchTerm, selectedSource]);
 
-  useEffect(() => {
+ /* useEffect(() => {
     if (searchTerm.trim() === '' && showingSearchResults) {
       searchRequestIdRef.current += 1;
       setIsSearching(false);
@@ -934,7 +934,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       setErrorMessage(null);
       resetPlayer();
     }
-  }, [localTracks, resetPlayer, searchTerm, selectedSource, showingSearchResults]);
+  }, [localTracks, resetPlayer, searchTerm, selectedSource, showingSearchResults]);*/
 
   useEffect(() => {
     if (selectedBitrate <= 0) return;

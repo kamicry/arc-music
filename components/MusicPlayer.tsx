@@ -710,8 +710,16 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
     const trimmedKeyword = keyword.trim();
     if (!trimmedKeyword) return;
 
+    const activeTrack = currentSongIndex >= 0 ? musicList[currentSongIndex] : null;
+    const hasActiveSound = !!soundRef.current;
     const requestId = ++searchRequestIdRef.current;
-    resetPlayer();
+
+    if (!hasActiveSound) {
+      resetPlayer();
+    } else {
+      autoPlayRef.current = false;
+    }
+
     setIsSearching(true);
     setErrorMessage(null);
 
@@ -753,8 +761,30 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       if (searchRequestIdRef.current !== requestId) {
         return;
       }
+
       setAllTracks(mapped);
-      setMusicList(mapped);
+
+      let nextList: Track[] = mapped;
+      let nextIndex: number | null = null;
+
+      if (hasActiveSound && activeTrack) {
+        const existingIndex = mapped.findIndex((item) => item.id === activeTrack.id);
+        if (existingIndex >= 0) {
+          const mergedTrack: Track = { ...mapped[existingIndex], ...activeTrack };
+          nextList = [...mapped];
+          nextList[existingIndex] = mergedTrack;
+          nextIndex = existingIndex;
+        } else {
+          nextList = [activeTrack, ...mapped];
+          nextIndex = 0;
+        }
+      }
+
+      setMusicList(nextList);
+      if (nextIndex !== null) {
+        setCurrentSongIndex(nextIndex);
+      }
+
       setShowingSearchResults(true);
       setShowTranslation(false);
       setLastSearchKeyword(trimmedKeyword);
@@ -768,20 +798,22 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       }
       const message = err instanceof Error ? err.message : '搜索失败，请稍后再试';
       setErrorMessage(message);
-      setAllTracks([]);
-      setMusicList([]);
       setShowingSearchResults(true);
       setShowTranslation(false);
       setLastSearchKeyword(trimmedKeyword);
       setSearchPage(page);
       setSearchPageInput(String(page));
       setSearchHasMore(false);
+      setAllTracks([]);
+      if (!hasActiveSound) {
+        setMusicList([]);
+      }
     } finally {
       if (searchRequestIdRef.current === requestId) {
         setIsSearching(false);
       }
     }
-  }, [callMusicApi, resetPlayer, selectedBitrate]);
+  }, [callMusicApi, currentSongIndex, musicList, resetPlayer, selectedBitrate]);
 
   const handleSearch = useCallback(async () => {
     const keyword = searchTerm.trim();

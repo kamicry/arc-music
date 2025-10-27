@@ -1014,7 +1014,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
   );
 
   const coverNodeLarge = (
-    <div className="w-56 h-56 md:w-64 md:h-64 rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
+    <div className="w-56 h-56 md:-mt-4  rounded-2xl overflow-hidden shadow-xl transition-transform duration-1000">
       {coverUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={coverUrl} alt="cover" className="w-full h-full object-contain bg-slate-900/10" />

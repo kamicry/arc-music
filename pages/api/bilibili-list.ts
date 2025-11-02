@@ -1,6 +1,4 @@
-// pages/api/bilibili-list.js
-//import fetch from 'node-fetch';
-
+// pages/api/bilibili-list.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -27,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const bvids = await getPlaylistBVIds(mediaId);
+    const bvids = await getPlaylistBVIds(mediaId as string);
     
     res.status(200).json({
       success: true,
@@ -37,21 +35,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Error fetching B站 playlist:', error);
+    
+    // 方法一：使用类型检查
+    let errorMessage = 'An unknown error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
     res.status(500).json({ 
       success: false,
-      error: error.message 
+      error: errorMessage 
     });
   }
 }
 
-async function getPlaylistBVIds(mediaId) {
-  const bvids = [];
+async function getPlaylistBVIds(mediaId: string) {
+  const bvids: string[] = [];
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
     try {
-      // B站收藏夹API [citation:6]
+      // B站收藏夹API 
       const apiUrl = `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${mediaId}&pn=${page}&ps=20`;
       
       const response = await fetch(apiUrl, {
@@ -86,7 +91,7 @@ async function getPlaylistBVIds(mediaId) {
 
       console.log(`第${page}页获取完成，当前共获取${bvids.length}个视频`);
 
-      // 检查是否还有下一页 [citation:6]
+      // 检查是否还有下一页 
       hasMore = data.data?.has_more === 1;
       page++;
       

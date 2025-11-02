@@ -1,20 +1,20 @@
-// pages/bilibili-downloader.js
-import { useState } from 'react';
+// pages/bilibili-downloader.tsx
+import { useState, FormEvent } from 'react';
 
 export default function BilibiliDownloader() {
-  const [mediaId, setMediaId] = useState('');
-  const [bvids, setBvids] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [mediaId, setMediaId] = useState<string>('');
+  const [bvids, setBvids] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
 
-  const extractMediaIdFromUrl = (url) => {
+  const extractMediaIdFromUrl = (url: string): string | null => {
     // 从B站播放列表URL中提取media_id
     // 支持格式: https://www.bilibili.com/list/ml3399027968
     const match = url.match(/list\/ml(\d+)/);
     return match ? match[1] : null;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -43,7 +43,9 @@ export default function BilibiliDownloader() {
       setBvids(data.bvids);
       setMediaId(finalMediaId); // 更新为纯数字ID
     } catch (err) {
-      setError(err.message);
+      // 处理 unknown 类型的错误
+      const errorMessage = err instanceof Error ? err.message : '发生了未知错误';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -53,7 +55,7 @@ export default function BilibiliDownloader() {
     const text = bvids.join('\n');
     navigator.clipboard.writeText(text)
       .then(() => alert('BV号已复制到剪贴板！'))
-      .catch(err => console.error('复制失败:', err));
+      .catch((err: Error) => console.error('复制失败:', err));
   };
 
   const downloadAsText = () => {
@@ -82,7 +84,7 @@ export default function BilibiliDownloader() {
             id="mediaId"
             type="text"
             value={mediaId}
-            onChange={(e) => setMediaId(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMediaId(e.target.value)}
             placeholder="输入播放列表ID (如: 3399027968) 或完整URL"
             required
             style={{

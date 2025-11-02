@@ -21,77 +21,6 @@ interface ApiResponse {
   error?: string;
 }
 
-// 播放列表滚动条样式组件
-const PlaylistScrollbarStyles = () => (
-  <style jsx global>{`
-    .playlist-scrollbar {
-      scrollbar-width: thin;
-      scrollbar-color: #00a1d6 #f1f1f1;
-    }
-    
-    .playlist-scrollbar::-webkit-scrollbar {
-      width: 6px;
-    }
-    
-    .playlist-scrollbar::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 3px;
-    }
-    
-    .playlist-scrollbar::-webkit-scrollbar-thumb {
-      background: #00a1d6;
-      border-radius: 3px;
-    }
-    
-    .playlist-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #008fb3;
-    }
-  `}</style>
-);
-
-// 全局滚动条样式组件
-const GlobalScrollbarStyles = () => (
-  <style jsx global>{`
-    /* 全局滚动条样式 */
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-      background: #f1f1f1;
-      border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-      background: #c1c1c1;
-      border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-      background: #a8a8a8;
-    }
-    
-    /* Firefox 滚动条样式 */
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: #c1c1c1 #f1f1f1;
-    }
-    
-    /* 动画 */
-    @keyframes pulse {
-      0% { opacity: 1; }
-      50% { opacity: 0.5; }
-      100% { opacity: 1; }
-    }
-    
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-  `}</style>
-);
-
 export default function VideoPlayer() {
   // 状态管理
   const [videos, setVideos] = useState<VideoInfo[]>([]);
@@ -169,9 +98,9 @@ export default function VideoPlayer() {
     };
   }, [videos, currentVideo]);
 
-  // 分页控制
+  // 分页控制 - 修复逻辑
   const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || newPage > (pagination.totalPages || 1)) return;
+    if (newPage < 1 || (pagination.totalPages && newPage > pagination.totalPages)) return;
     fetchPlaylist(newPage, pagination.pageSize);
   };
 
@@ -214,424 +143,264 @@ export default function VideoPlayer() {
     setCurrentVideo(videos[prevIndex]);
   };
 
-  // 计算分页按钮状态
+  // 计算分页按钮状态 - 修复逻辑
   const canGoPrev = pagination.currentPage > 1;
   const canGoNext = pagination.hasMore;
 
   return (
-    <div style={{ 
-      maxWidth: '1200px', 
-      margin: '0 auto', 
-      padding: '20px',
-      fontFamily: 'Arial, sans-serif',
-    }}>
-      {/* 添加全局滚动条样式 */}
-      <GlobalScrollbarStyles />
-      <PlaylistScrollbarStyles />
+    <>
+      {/* 全局样式 */}
+      <style jsx global>{`
+        /* 全局滚动条样式 */
+        html, body {
+          overflow: auto;
+          scrollbar-width: thin;
+          scrollbar-color: #c1c1c1 #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar {
+          width: 12px;
+          height: 12px;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 6px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: #c1c1c1;
+          border-radius: 6px;
+          border: 2px solid #f1f1f1;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: #a8a8a8;
+        }
+        
+        /* 播放列表滚动条 */
+        .playlist-container::-webkit-scrollbar {
+          width: 8px;
+        }
+        
+        .playlist-container::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        
+        .playlist-container::-webkit-scrollbar-thumb {
+          background: #00a1d6;
+          border-radius: 4px;
+        }
+        
+        .playlist-container::-webkit-scrollbar-thumb:hover {
+          background: #008fb3;
+        }
+        
+        /* 动画 */
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.5; }
+          100% { opacity: 1; }
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
 
-      <h1 style={{ 
-        textAlign: 'center', 
-        color: '#00a1d6',
-        marginBottom: '30px'
-      }}>
-        B站视频播放器
-      </h1>
-
-      {/* 分页控制 - 修复按钮状态 */}
-      <div style={{
-        backgroundColor: '#f5f5f5',
-        padding: '15px',
-        borderRadius: '8px',
-        marginBottom: '20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '10px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span>每页显示:</span>
-          <select 
-            value={pagination.pageSize}
-            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-            style={{
-              padding: '5px 10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              backgroundColor: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            <option value={5}>5个视频</option>
-            <option value={10}>10个视频</option>
-            <option value={15}>15个视频</option>
-            <option value={20}>20个视频</option>
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            onClick={() => handlePageChange(pagination.currentPage - 1)}
-            disabled={!canGoPrev}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: canGoPrev ? '#00a1d6' : '#cccccc',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: canGoPrev ? 'pointer' : 'not-allowed',
-              fontWeight: 'bold',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              if (canGoPrev) {
-                e.currentTarget.style.backgroundColor = '#008fb3';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (canGoPrev) {
-                e.currentTarget.style.backgroundColor = '#00a1d6';
-              }
-            }}
-          >
-            上一页
-          </button>
-
-          <span style={{ minWidth: '120px', textAlign: 'center' }}>
-            第 {pagination.currentPage} 页 / 共 {(pagination.totalPages || 1)} 页
-          </span>
-
-          <button
-            onClick={() => handlePageChange(pagination.currentPage + 1)}
-            disabled={!canGoNext}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: canGoNext ? '#00a1d6' : '#cccccc',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: canGoNext ? 'pointer' : 'not-allowed',
-              fontWeight: 'bold',
-              transition: 'background-color 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              if (canGoNext) {
-                e.currentTarget.style.backgroundColor = '#008fb3';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (canGoNext) {
-                e.currentTarget.style.backgroundColor = '#00a1d6';
-              }
-            }}
-          >
-            下一页
-          </button>
-        </div>
-
-        <div style={{ fontWeight: 'bold' }}>
-          共 {pagination.totalItems} 个视频
-        </div>
-      </div>
-
-      {/* 错误显示 */}
-      {error && (
-        <div style={{
-          padding: '15px',
-          backgroundColor: '#ffe6e6',
-          border: '1px solid #ffcccc',
-          borderRadius: '8px',
-          marginBottom: '20px',
-          color: '#cc0000'
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* 主要内容区域 */}
       <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: '1fr 2fr',
-        gap: '20px',
-        alignItems: 'start'
+        minHeight: '100vh',
+        backgroundColor: '#f8f9fa',
+        fontFamily: 'Arial, sans-serif'
       }}>
-        {/* 播放列表 - 使用 CSS 类名应用滚动条样式 */}
-        <div className="playlist-scrollbar" style={{
-          backgroundColor: '#f9f9f9',
-          borderRadius: '8px',
-          padding: '15px',
-          maxHeight: '600px',
-          overflowY: 'auto',
+        <div style={{ 
+          maxWidth: '1200px', 
+          margin: '0 auto', 
+          padding: '20px',
+          minHeight: '100vh'
         }}>
-          <h2 style={{ 
-            marginTop: 0, 
-            marginBottom: '15px',
-            paddingBottom: '10px',
-            borderBottom: '1px solid #eee',
-            position: 'sticky',
-            top: 0,
-            backgroundColor: '#f9f9f9',
-            zIndex: 1
+          <h1 style={{ 
+            textAlign: 'center', 
+            color: '#00a1d6',
+            marginBottom: '30px',
+            fontSize: '2rem',
+            fontWeight: 'bold'
           }}>
-            播放列表 ({videos.length})
-          </h2>
+            B站视频播放器
+          </h1>
 
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '20px' }}>
-              加载中...
+          {/* 分页控制 - 修复按钮状态 */}
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '15px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontWeight: '500' }}>每页显示:</span>
+              <select 
+                value={pagination.pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  backgroundColor: 'white',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                <option value={5}>5个视频</option>
+                <option value={10}>10个视频</option>
+                <option value={15}>15个视频</option>
+                <option value={20}>20个视频</option>
+              </select>
             </div>
-          ) : videos.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-              暂无视频
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {videos.map((video, index) => (
-                <div
-                  key={video.bv}
-                  onClick={() => playVideo(video)}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '6px',
-                    backgroundColor: currentVideo?.bv === video.bv ? '#e6f7ff' : 'white',
-                    border: currentVideo?.bv === video.bv ? '2px solid #00a1d6' : '1px solid #eee',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    position: 'relative'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = currentVideo?.bv === video.bv ? '#d4f0ff' : '#f5f5f5';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = currentVideo?.bv === video.bv ? '#e6f7ff' : 'white';
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <button
+                onClick={() => handlePageChange(pagination.currentPage - 1)}
+                disabled={!canGoPrev || loading}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: canGoPrev && !loading ? '#00a1d6' : '#e0e0e0',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: canGoPrev && !loading ? 'pointer' : 'not-allowed',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  minWidth: '80px'
+                }}
+                onMouseEnter={(e) => {
+                  if (canGoPrev && !loading) {
+                    e.currentTarget.style.backgroundColor = '#008fb3';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (canGoPrev && !loading) {
+                    e.currentTarget.style.backgroundColor = '#00a1d6';
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  <div style={{ 
-                    fontWeight: currentVideo?.bv === video.bv ? 'bold' : 'normal',
-                    fontSize: '14px',
-                    lineHeight: '1.4'
-                  }}>
-                    <span style={{
-                      display: 'inline-block',
-                      width: '24px',
-                      height: '24px',
-                      lineHeight: '24px',
-                      textAlign: 'center',
-                      backgroundColor: currentVideo?.bv === video.bv ? '#00a1d6' : '#ddd',
-                      color: currentVideo?.bv === video.bv ? 'white' : '#666',
-                      borderRadius: '50%',
-                      marginRight: '8px',
-                      fontSize: '12px'
-                    }}>
-                      {index + 1}
-                    </span>
-                    {video.title}
-                  </div>
-                  <div style={{ 
-                    fontSize: '12px', 
-                    color: '#666', 
-                    marginTop: '5px',
-                    fontFamily: 'monospace',
-                    marginLeft: '32px'
-                  }}>
-                    {video.bv}
-                  </div>
-                  
-                  {/* 当前播放指示器 */}
-                  {currentVideo?.bv === video.bv && (
-                    <div style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: '8px',
-                      height: '8px',
-                      backgroundColor: '#00a1d6',
-                      borderRadius: '50%',
-                      animation: 'pulse 1.5s infinite'
-                    }}></div>
-                  )}
-                </div>
-              ))}
+                  }
+                }}
+              >
+                {loading ? '...' : '上一页'}
+              </button>
+
+              <div style={{ 
+                minWidth: '140px', 
+                textAlign: 'center',
+                fontWeight: '500',
+                fontSize: '14px'
+              }}>
+                第 <strong>{pagination.currentPage}</strong> 页 / 共 <strong>{pagination.totalPages || 1}</strong> 页
+              </div>
+
+              <button
+                onClick={() => handlePageChange(pagination.currentPage + 1)}
+                disabled={!canGoNext || loading}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: canGoNext && !loading ? '#00a1d6' : '#e0e0e0',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: canGoNext && !loading ? 'pointer' : 'not-allowed',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                  transition: 'all 0.2s ease',
+                  minWidth: '80px'
+                }}
+                onMouseEnter={(e) => {
+                  if (canGoNext && !loading) {
+                    e.currentTarget.style.backgroundColor = '#008fb3';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (canGoNext && !loading) {
+                    e.currentTarget.style.backgroundColor = '#00a1d6';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                {loading ? '...' : '下一页'}
+              </button>
+            </div>
+
+            <div style={{ fontWeight: 'bold', color: '#666' }}>
+              共 {pagination.totalItems} 个视频
+            </div>
+          </div>
+
+          {/* 错误显示 */}
+          {error && (
+            <div style={{
+              padding: '15px',
+              backgroundColor: '#ffe6e6',
+              border: '1px solid #ffcccc',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              color: '#cc0000',
+              fontWeight: '500'
+            }}>
+              {error}
             </div>
           )}
-        </div>
 
-        {/* 视频播放器 */}
-        <div id="video-player-section">
-          {currentVideo ? (
-            <div style={{
-              backgroundColor: '#f9f9f9',
-              borderRadius: '8px',
-              padding: '20px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              position: 'sticky',
-              top: '20px'
-            }}>
+          {/* 主要内容区域 */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 2fr',
+            gap: '24px',
+            alignItems: 'start',
+            minHeight: '600px'
+          }}>
+            {/* 播放列表 */}
+            <div 
+              className="playlist-container"
+              style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '20px',
+                maxHeight: '700px',
+                overflowY: 'auto',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                scrollbarWidth: 'thin' as any,
+                scrollbarColor: '#00a1d6 #f1f1f1'
+              }}
+            >
               <h2 style={{ 
                 marginTop: 0, 
-                marginBottom: '15px',
-                fontSize: '18px',
-                lineHeight: '1.4'
+                marginBottom: '20px',
+                paddingBottom: '15px',
+                borderBottom: '2px solid #f0f0f0',
+                position: 'sticky',
+                top: 0,
+                backgroundColor: 'white',
+                zIndex: 1,
+                fontSize: '1.2rem',
+                color: '#333'
               }}>
-                {currentVideo.title}
+                播放列表 <span style={{ color: '#00a1d6' }}>({videos.length})</span>
               </h2>
 
-              {/* 视频播放器 */}
-              <div style={{ 
-                position: 'relative', 
-                paddingBottom: '56.25%', /* 16:9 宽高比 */
-                height: 0,
-                marginBottom: '15px'
-              }}>
-                <video
-                  ref={videoRef}
-                  controls
-                  autoPlay
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    borderRadius: '8px',
-                    backgroundColor: '#000'
-                  }}
-                  src={currentVideo.video}
-                >
-                  您的浏览器不支持视频播放。
-                </video>
-              </div>
-
-              {/* 视频信息 */}
-              <div style={{ 
-                backgroundColor: 'white',
-                padding: '15px',
-                borderRadius: '6px',
-                border: '1px solid #eee',
-                maxHeight: '200px',
-                overflowY: 'auto'
-              }}>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong>BV号:</strong> 
-                  <span style={{ 
-                    fontFamily: 'monospace', 
-                    marginLeft: '8px',
-                    backgroundColor: '#f0f0f0',
-                    padding: '2px 6px',
-                    borderRadius: '3px'
-                  }}>
-                    {currentVideo.bv}
-                  </span>
-                </div>
-                
-                <div style={{ marginBottom: '10px' }}>
-                  <strong>视频链接:</strong>
-                  <a 
-                    href={currentVideo.video} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ 
-                      display: 'block',
-                      wordBreak: 'break-all',
-                      color: '#00a1d6',
-                      marginTop: '5px',
-                      fontSize: '14px',
-                      textDecoration: 'none'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.textDecoration = 'underline';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.textDecoration = 'none';
-                    }}
-                  >
-                    {currentVideo.video}
-                  </a>
-                </div>
-              </div>
-
-              {/* 播放控制 */}
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'center', 
-                gap: '15px',
-                marginTop: '15px'
-              }}>
-                <button
-                  onClick={playPrev}
-                  disabled={videos.length <= 1}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: videos.length <= 1 ? '#ccc' : '#00a1d6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: videos.length <= 1 ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    transition: 'background-color 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (videos.length > 1) {
-                      e.currentTarget.style.backgroundColor = '#008fb3';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (videos.length > 1) {
-                      e.currentTarget.style.backgroundColor = '#00a1d6';
-                    }
-                  }}
-                >
-                  ⏮ 上一个
-                </button>
-                
-                <button
-                  onClick={playNext}
-                  disabled={videos.length <= 1}
-                  style={{
-                    padding: '10px 20px',
-                    backgroundColor: videos.length <= 1 ? '#ccc' : '#00a1d6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: videos.length <= 1 ? 'not-allowed' : 'pointer',
-                    fontWeight: 'bold',
-                    transition: 'background-color 0.2s'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (videos.length > 1) {
-                      e.currentTarget.style.backgroundColor = '#008fb3';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (videos.length > 1) {
-                      e.currentTarget.style.backgroundColor = '#00a1d6';
-                    }
-                  }}
-                >
-                  下一个 ⏭
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{
-              backgroundColor: '#f9f9f9',
-              borderRadius: '8px',
-              padding: '40px',
-              textAlign: 'center',
-              color: '#666',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: '300px'
-            }}>
               {loading ? (
-                <>
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '40px',
+                  color: '#666'
+                }}>
                   <div style={{
                     width: '40px',
                     height: '40px',
@@ -639,40 +408,338 @@ export default function VideoPlayer() {
                     borderTop: '4px solid #00a1d6',
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite',
-                    marginBottom: '15px'
+                    margin: '0 auto 15px'
                   }}></div>
                   加载中...
-                </>
+                </div>
+              ) : videos.length === 0 ? (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '40px', 
+                  color: '#666',
+                  fontSize: '16px'
+                }}>
+                  📺 暂无视频
+                </div>
               ) : (
-                <>
-                  <div style={{ fontSize: '48px', marginBottom: '15px' }}>📺</div>
-                  请从左侧播放列表中选择一个视频
-                </>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {videos.map((video, index) => (
+                    <div
+                      key={video.bv}
+                      onClick={() => playVideo(video)}
+                      style={{
+                        padding: '16px',
+                        borderRadius: '8px',
+                        backgroundColor: currentVideo?.bv === video.bv ? '#e6f7ff' : '#f8f9fa',
+                        border: currentVideo?.bv === video.bv ? '2px solid #00a1d6' : '1px solid #e9ecef',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        position: 'relative'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = currentVideo?.bv === video.bv ? '#d4f0ff' : '#e9ecef';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = currentVideo?.bv === video.bv ? '#e6f7ff' : '#f8f9fa';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <div style={{ 
+                        fontWeight: currentVideo?.bv === video.bv ? '600' : '500',
+                        fontSize: '14px',
+                        lineHeight: '1.5',
+                        display: 'flex',
+                        alignItems: 'flex-start'
+                      }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '28px',
+                          height: '28px',
+                          lineHeight: '28px',
+                          textAlign: 'center',
+                          backgroundColor: currentVideo?.bv === video.bv ? '#00a1d6' : '#dee2e6',
+                          color: currentVideo?.bv === video.bv ? 'white' : '#495057',
+                          borderRadius: '50%',
+                          marginRight: '12px',
+                          fontSize: '12px',
+                          flexShrink: 0,
+                          marginTop: '2px'
+                        }}>
+                          {index + 1}
+                        </span>
+                        <span style={{ flex: 1 }}>
+                          {video.title}
+                        </span>
+                      </div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#6c757d', 
+                        marginTop: '8px',
+                        fontFamily: 'monospace',
+                        marginLeft: '40px'
+                      }}>
+                        {video.bv}
+                      </div>
+                      
+                      {/* 当前播放指示器 */}
+                      {currentVideo?.bv === video.bv && (
+                        <div style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          width: '10px',
+                          height: '10px',
+                          backgroundColor: '#00a1d6',
+                          borderRadius: '50%',
+                          animation: 'pulse 1.5s infinite'
+                        }}></div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          )}
+
+            {/* 视频播放器 */}
+            <div id="video-player-section">
+              {currentVideo ? (
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  position: 'sticky',
+                  top: '20px'
+                }}>
+                  <h2 style={{ 
+                    marginTop: 0, 
+                    marginBottom: '20px',
+                    fontSize: '1.3rem',
+                    lineHeight: '1.4',
+                    color: '#333',
+                    fontWeight: '600'
+                  }}>
+                    {currentVideo.title}
+                  </h2>
+
+                  {/* 视频播放器 */}
+                  <div style={{ 
+                    position: 'relative', 
+                    paddingBottom: '56.25%', /* 16:9 宽高比 */
+                    height: 0,
+                    marginBottom: '20px',
+                    borderRadius: '8px',
+                    overflow: 'hidden'
+                  }}>
+                    <video
+                      ref={videoRef}
+                      controls
+                      autoPlay
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '8px',
+                        backgroundColor: '#000'
+                      }}
+                      src={currentVideo.video}
+                    >
+                      您的浏览器不支持视频播放。
+                    </video>
+                  </div>
+
+                  {/* 视频信息 */}
+                  <div style={{ 
+                    backgroundColor: '#f8f9fa',
+                    padding: '20px',
+                    borderRadius: '8px',
+                    border: '1px solid #e9ecef',
+                    maxHeight: '200px',
+                    overflowY: 'auto'
+                  }}>
+                    <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
+                      <strong style={{ minWidth: '60px' }}>BV号:</strong> 
+                      <span style={{ 
+                        fontFamily: 'monospace', 
+                        marginLeft: '8px',
+                        backgroundColor: '#e9ecef',
+                        padding: '6px 10px',
+                        borderRadius: '4px',
+                        fontSize: '14px'
+                      }}>
+                        {currentVideo.bv}
+                      </span>
+                    </div>
+                    
+                    <div style={{ marginBottom: '0' }}>
+                      <strong style={{ display: 'block', marginBottom: '8px' }}>视频链接:</strong>
+                      <a 
+                        href={currentVideo.video} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ 
+                          display: 'block',
+                          wordBreak: 'break-all',
+                          color: '#00a1d6',
+                          fontSize: '14px',
+                          textDecoration: 'none',
+                          lineHeight: '1.4',
+                          padding: '8px',
+                          backgroundColor: 'white',
+                          borderRadius: '4px',
+                          border: '1px solid #e9ecef'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.textDecoration = 'underline';
+                          e.currentTarget.style.backgroundColor = '#f8f9fa';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.textDecoration = 'none';
+                          e.currentTarget.style.backgroundColor = 'white';
+                        }}
+                      >
+                        {currentVideo.video}
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* 播放控制 */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    gap: '20px',
+                    marginTop: '20px'
+                  }}>
+                    <button
+                      onClick={playPrev}
+                      disabled={videos.length <= 1}
+                      style={{
+                        padding: '12px 24px',
+                        backgroundColor: videos.length <= 1 ? '#e0e0e0' : '#00a1d6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: videos.length <= 1 ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '14px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (videos.length > 1) {
+                          e.currentTarget.style.backgroundColor = '#008fb3';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (videos.length > 1) {
+                          e.currentTarget.style.backgroundColor = '#00a1d6';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      ⏮ 上一个
+                    </button>
+                    
+                    <button
+                      onClick={playNext}
+                      disabled={videos.length <= 1}
+                      style={{
+                        padding: '12px 24px',
+                        backgroundColor: videos.length <= 1 ? '#e0e0e0' : '#00a1d6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: videos.length <= 1 ? 'not-allowed' : 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '14px',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (videos.length > 1) {
+                          e.currentTarget.style.backgroundColor = '#008fb3';
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (videos.length > 1) {
+                          e.currentTarget.style.backgroundColor = '#00a1d6';
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      下一个 ⏭
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  backgroundColor: 'white',
+                  borderRadius: '12px',
+                  padding: '60px',
+                  textAlign: 'center',
+                  color: '#666',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: '400px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}>
+                  {loading ? (
+                    <>
+                      <div style={{
+                        width: '50px',
+                        height: '50px',
+                        border: '4px solid #f3f3f3',
+                        borderTop: '4px solid #00a1d6',
+                        borderRadius: '50%',
+                        animation: 'spin 1s linear infinite',
+                        marginBottom: '20px'
+                      }}></div>
+                      <div style={{ fontSize: '16px' }}>加载中...</div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: '64px', marginBottom: '20px' }}>📺</div>
+                      <div style={{ fontSize: '18px', marginBottom: '10px' }}>选择视频开始播放</div>
+                      <div style={{ fontSize: '14px', color: '#999' }}>请从左侧播放列表中选择一个视频</div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 功能说明 */}
+          <div style={{
+            marginTop: '30px',
+            padding: '20px',
+            backgroundColor: '#e6f7ff',
+            borderRadius: '12px',
+            fontSize: '14px',
+            border: '1px solid #b3e0ff',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ marginTop: 0, color: '#0077b3', fontSize: '16px' }}>功能说明:</h3>
+            <ul style={{ paddingLeft: '20px', marginBottom: 0, lineHeight: '1.6' }}>
+              <li>使用分页控件调整显示的播放列表</li>
+              <li>点击左侧列表中的视频标题开始播放</li>
+              <li>当前播放的视频会高亮显示</li>
+              <li>视频播放结束后会自动播放下一个</li>
+              <li>可以使用"上一个"/"下一个"按钮手动切换</li>
+              <li>显示当前视频的BV号和原始链接</li>
+            </ul>
+          </div>
         </div>
       </div>
-
-      {/* 功能说明 */}
-      <div style={{
-        marginTop: '30px',
-        padding: '15px',
-        backgroundColor: '#f0f8ff',
-        borderRadius: '8px',
-        fontSize: '14px',
-        border: '1px solid #d4ebff'
-      }}>
-        <h3 style={{ marginTop: 0, color: '#00a1d6' }}>功能说明:</h3>
-        <ul style={{ paddingLeft: '20px', marginBottom: 0 }}>
-          <li>使用分页控件调整显示的播放列表</li>
-          <li>点击左侧列表中的视频标题开始播放</li>
-          <li>当前播放的视频会高亮显示</li>
-          <li>视频播放结束后会自动播放下一个</li>
-          <li>可以使用"上一个"/"下一个"按钮手动切换</li>
-          <li>显示当前视频的BV号和原始链接</li>
-        </ul>
-      </div>
-    </div>
+    </>
   );
 }

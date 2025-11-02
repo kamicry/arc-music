@@ -26,14 +26,20 @@ export default function VideoPlayer() {
   const [currentVideo, setCurrentVideo] = useState<VideoInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    pageSize: 10,
-    totalItems: 0,
-    hasMore: false,
-    totalPages: 0
-  });
-
+ // 在 useState 处修改类型定义
+const [pagination, setPagination] = useState<{
+  currentPage: number;
+  pageSize: number;
+  totalItems: number;
+  hasMore: boolean;
+  totalPages?: number; // 改为可选属性
+}>({
+  currentPage: 1,
+  pageSize: 10,
+  totalItems: 0,
+  hasMore: false
+  // totalPages 初始值可以省略
+});
   // 视频元素引用
   const videoRef = useRef<HTMLVideoElement>(null);
 

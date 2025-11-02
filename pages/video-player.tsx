@@ -21,6 +21,77 @@ interface ApiResponse {
   error?: string;
 }
 
+// 播放列表滚动条样式组件
+const PlaylistScrollbarStyles = () => (
+  <style jsx global>{`
+    .playlist-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #00a1d6 #f1f1f1;
+    }
+    
+    .playlist-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    .playlist-scrollbar::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 3px;
+    }
+    
+    .playlist-scrollbar::-webkit-scrollbar-thumb {
+      background: #00a1d6;
+      border-radius: 3px;
+    }
+    
+    .playlist-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #008fb3;
+    }
+  `}</style>
+);
+
+// 全局滚动条样式组件
+const GlobalScrollbarStyles = () => (
+  <style jsx global>{`
+    /* 全局滚动条样式 */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+    
+    /* Firefox 滚动条样式 */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #c1c1c1 #f1f1f1;
+    }
+    
+    /* 动画 */
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `}</style>
+);
+
 export default function VideoPlayer() {
   // 状态管理
   const [videos, setVideos] = useState<VideoInfo[]>([]);
@@ -153,38 +224,10 @@ export default function VideoPlayer() {
       margin: '0 auto', 
       padding: '20px',
       fontFamily: 'Arial, sans-serif',
-      // 添加全局滚动条样式
-      scrollbarWidth: 'thin',
-      scrollbarColor: '#c1c1c1 #f1f1f1'
     }}>
-      {/* 添加自定义滚动条样式 */}
-      <style jsx global>{`
-        /* 全局滚动条样式 */
-        ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-          background: #f1f1f1;
-          border-radius: 4px;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-          background: #c1c1c1;
-          border-radius: 4px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-          background: #a8a8a8;
-        }
-        
-        /* Firefox 滚动条样式 */
-        * {
-          scrollbar-width: thin;
-          scrollbar-color: #c1c1c1 #f1f1f1;
-        }
-      `}</style>
+      {/* 添加全局滚动条样式 */}
+      <GlobalScrollbarStyles />
+      <PlaylistScrollbarStyles />
 
       <h1 style={{ 
         textAlign: 'center', 
@@ -312,37 +355,14 @@ export default function VideoPlayer() {
         gap: '20px',
         alignItems: 'start'
       }}>
-        {/* 播放列表 - 添加滚动条样式 */}
-        <div style={{
+        {/* 播放列表 - 使用 CSS 类名应用滚动条样式 */}
+        <div className="playlist-scrollbar" style={{
           backgroundColor: '#f9f9f9',
           borderRadius: '8px',
           padding: '15px',
           maxHeight: '600px',
           overflowY: 'auto',
-          // 播放列表滚动条样式
-          scrollbarWidth: 'thin',
-          scrollbarColor: '#00a1d6 #f1f1f1'
         }}>
-          <style jsx>{`
-            .playlist::-webkit-scrollbar {
-              width: 6px;
-            }
-            
-            .playlist::-webkit-scrollbar-track {
-              background: #f1f1f1;
-              border-radius: 3px;
-            }
-            
-            .playlist::-webkit-scrollbar-thumb {
-              background: #00a1d6;
-              border-radius: 3px;
-            }
-            
-            .playlist::-webkit-scrollbar-thumb:hover {
-              background: #008fb3;
-            }
-          `}</style>
-          
           <h2 style={{ 
             marginTop: 0, 
             marginBottom: '15px',
@@ -365,7 +385,7 @@ export default function VideoPlayer() {
               暂无视频
             </div>
           ) : (
-            <div className="playlist" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {videos.map((video, index) => (
                 <div
                   key={video.bv}
@@ -653,20 +673,6 @@ export default function VideoPlayer() {
           <li>显示当前视频的BV号和原始链接</li>
         </ul>
       </div>
-
-      {/* 添加动画样式 */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-        
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

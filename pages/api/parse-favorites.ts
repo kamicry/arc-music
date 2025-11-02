@@ -1,21 +1,12 @@
 // pages/api/parse-favorites.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 
-// 定义返回数据的类型
 interface VideoInfo {
   bv: string;
   title: string;
   video: string;
 }
 
-interface ParseResponse {
-  success: boolean;
-  count: number;
-  videos: VideoInfo[];
-  error?: string;
-}
-
-// 解析接口返回的数据结构
 interface ParseApiResponse {
   code: number;
   msg: string;
@@ -25,83 +16,73 @@ interface ParseApiResponse {
     cover?: string;
     desc?: string;
     publish_time?: string;
-    origin?: {
-      title: string;
-      duration: number;
-      duration_format: string;
-      cover: string;
-      accept: string[];
-      video_url: string;
-    };
   };
-  author?: {
-    name: string;
-    avatar: string;
-  };
-  type?: string;
 }
 
-// 获取收藏夹视频列表的函数（保持不变）
-async function getPlaylistBVIds(mediaId: string): Promise<string[]> {
-  const bvids: string[] = [];
-  let page = 1;
-  let hasMore = true;
+interface ParseResponse {
+  success: boolean;
+  count: number;
+  videos: VideoInfo[];
+  pagination: {
+    currentPage: number;
+    pageSize: number;
+    totalItems: number;
+    hasMore: boolean;
+    totalPages?: number;
+  };
+  error?: string;
+}
 
-  while (hasMore) {
-    try {
-      const apiUrl = `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${mediaId}&pn=${page}&ps=20`;
-      
-      const response = await fetch(apiUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Referer': 'https://www.bilibili.com/'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`B站API请求失败: ${response.status}`);
+// 分页获取收藏夹BV号
+async function getPlaylistBVIds(mediaId: string, page: number = 1, pageSize: number = 20): Promise<{
+  bvids: string[];
+  hasMore: boolean;
+  totalItems: number;
+}> {
+  try {
+    const apiUrl = `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${mediaId}&pn=${page}&ps=${pageSize}`;
+    
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.bilibili.com/'
       }
+    });
 
-      const data = await response.json();
-      
-      if (data.code !== 0) {
-        throw new Error(`B站API返回错误: ${data.message}`);
-      }
-
-      const resources = data.data?.medias || [];
-      
-      if (resources.length === 0) {
-        break;
-      }
-
-      for (const item of resources) {
-        if (item.bvid) {
-          bvids.push(item.bvid);
-        }
-      }
-
-      console.log(`第${page}页获取完成，当前共获取${bvids.length}个视频`);
-
-      hasMore = data.data?.has_more === 1;
-      page++;
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-    } catch (error) {
-      console.error(`获取第${page}页时出错:`, error);
-      break;
+    if (!response.ok) {
+      throw new Error(`B站API请求失败: ${response.status}`);
     }
-  }
 
-  return bvids;
+    const data = await response.json();
+    
+    if (data.code !== 0) {
+      throw new Error(`B站API返回错误: ${data.message}`);
+    }
+
+    const resources = data.data?.medias || [];
+    const bvids: string[] = [];
+
+    for (const item of resources) {
+      if (item.bvid) {
+        bvids.push(item.bvid);
+      }
+    }
+
+    const hasMore = data.data?.has_more === 1;
+    const totalItems = data.data?.info?.media_count || 0;
+
+    return { bvids, hasMore, totalItems };
+    
+  } catch (error) {
+    console.error(`获取第${page}页时出错:`, error);
+    throw error;
+  }
 }
 
-// 更新后的解析单个视频信息的函数
+// 解析单个视频信息（保持不变）
 async function parseVideoInfo(bv: string): Promise<VideoInfo | null> {
   try {
     const parseUrl = `https://api.yuafeng.cn/API/ly/bilibili_jx.php?url=https://www.bilibili.com/video/${bv}`;
-    
-    console.log(`正在解析视频: ${bv}`);
     
     const response = await fetch(parseUrl, {
       headers: {
@@ -116,7 +97,6 @@ async function parseVideoInfo(bv: string): Promise<VideoInfo | null> {
 
     const data: ParseApiResponse = await response.json();
     
-    // 根据你提供的JSON结构提取title和video
     if (data.code === 0 && data.data && data.data.title && data.data.video) {
       return {
         bv,
@@ -134,9 +114,7 @@ async function parseVideoInfo(bv: string): Promise<VideoInfo | null> {
   }
 }
 
-// 主处理函数保持不变
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ParseResponse>) {
-  // 设置CORS头
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -150,57 +128,79 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       success: false, 
       count: 0, 
       videos: [], 
+      pagination: {
+        currentPage: 1,
+        pageSize: 20,
+        totalItems: 0,
+        hasMore: false
+      },
       error: 'Method not allowed' 
     });
   }
 
   try {
-    const mediaId = '3399027968'; // 固定的收藏夹ID
+    const { page = '1', pageSize = '10' } = req.query;
+    const mediaId = '3399027968';
     
-    console.log('开始获取收藏夹视频列表...');
+    const pageNum = parseInt(page as string);
+    const pageSizeNum = parseInt(pageSize as string);
     
-    // 1. 获取收藏夹中的所有BV号
-    const bvids = await getPlaylistBVIds(mediaId);
+    if (pageNum < 1 || pageSizeNum < 1 || pageSizeNum > 20) {
+      return res.status(400).json({
+        success: false,
+        count: 0,
+        videos: [],
+        pagination: {
+          currentPage: pageNum,
+          pageSize: pageSizeNum,
+          totalItems: 0,
+          hasMore: false
+        },
+        error: '分页参数无效: page ≥ 1, 1 ≤ pageSize ≤ 20'
+      });
+    }
+
+    console.log(`开始获取收藏夹第${pageNum}页，每页${pageSizeNum}条...`);
+    
+    // 1. 获取当前页的BV号
+    const { bvids, hasMore, totalItems } = await getPlaylistBVIds(mediaId, pageNum, pageSizeNum);
     
     if (bvids.length === 0) {
       return res.status(200).json({
         success: true,
         count: 0,
-        videos: []
+        videos: [],
+        pagination: {
+          currentPage: pageNum,
+          pageSize: pageSizeNum,
+          totalItems,
+          hasMore: false
+        }
       });
     }
 
-    console.log(`共获取到 ${bvids.length} 个视频，开始解析...`);
+    console.log(`第${pageNum}页获取到 ${bvids.length} 个视频，开始解析...`);
 
-    // 2. 并发解析所有视频信息
-    const videos: VideoInfo[] = [];
-    const batchSize = 3;
-    const delay = 1000;
+    // 2. 解析当前页的所有视频信息（控制并发）
+    const batchPromises = bvids.map(bv => parseVideoInfo(bv));
+    const batchResults = await Promise.all(batchPromises);
+    
+    const validResults = batchResults.filter((result): result is VideoInfo => result !== null);
 
-    for (let i = 0; i < bvids.length; i += batchSize) {
-      const batch = bvids.slice(i, i + batchSize);
-      console.log(`解析批次 ${Math.floor(i / batchSize) + 1}:`, batch);
-      
-      const batchPromises = batch.map(bv => parseVideoInfo(bv));
-      const batchResults = await Promise.all(batchPromises);
-      
-      const validResults = batchResults.filter((result): result is VideoInfo => result !== null);
-      videos.push(...validResults);
-      
-      console.log(`批次 ${Math.floor(i / batchSize) + 1} 完成，有效结果: ${validResults.length}`);
-      
-      if (i + batchSize < bvids.length) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
+    console.log(`第${pageNum}页解析完成，成功解析 ${validResults.length} 个视频`);
 
-    console.log(`解析完成，成功解析 ${videos.length} 个视频`);
-
-    // 3. 返回处理后的数据
+    // 3. 返回分页数据
     res.status(200).json({
       success: true,
-      count: videos.length,
-      videos
+      count: validResults.length,
+      videos: validResults,
+      pagination: {
+        currentPage: pageNum,
+        pageSize: pageSizeNum,
+        totalItems,
+        hasMore,
+        totalPages: Math.ceil(totalItems / pageSizeNum)
+      }
     });
 
   } catch (error) {
@@ -212,6 +212,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       success: false, 
       count: 0, 
       videos: [], 
+      pagination: {
+        currentPage: 1,
+        pageSize: 20,
+        totalItems: 0,
+        hasMore: false
+      },
       error: errorMessage 
     });
   }

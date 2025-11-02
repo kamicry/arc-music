@@ -1,7 +1,9 @@
 // pages/api/bilibili-list.js
 //import fetch from 'node-fetch';
 
-export default async function handler(req, res) {
+import { NextApiRequest, NextApiResponse } from 'next';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // 设置CORS头，允许跨域请求
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');

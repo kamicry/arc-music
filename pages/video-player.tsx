@@ -27,6 +27,7 @@ export default function VideoPlayer() {
   const [currentVideo, setCurrentVideo] = useState<VideoInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [jumpPage, setJumpPage] = useState('');
   const [pagination, setPagination] = useState<{
     currentPage: number;
     pageSize: number;
@@ -42,6 +43,7 @@ export default function VideoPlayer() {
 
   // 视频元素引用
   const videoRef = useRef<HTMLVideoElement>(null);
+  const jumpInputRef = useRef<HTMLInputElement>(null);
 
   // 获取播放列表
   const fetchPlaylist = async (page: number = pagination.currentPage, pageSize: number = pagination.pageSize) => {
@@ -98,15 +100,31 @@ export default function VideoPlayer() {
     };
   }, [videos, currentVideo]);
 
-  // 分页控制 - 修复逻辑
+  // 分页控制 - 移除禁用逻辑
   const handlePageChange = (newPage: number) => {
-    if (newPage < 1 || (pagination.totalPages && newPage > pagination.totalPages)) return;
+    if (newPage < 1) return;
     fetchPlaylist(newPage, pagination.pageSize);
   };
 
   const handlePageSizeChange = (newSize: number) => {
     if (newSize < 1 || newSize > 20) return;
     fetchPlaylist(1, newSize);
+  };
+
+  // 跳转到指定页面
+  const handleJumpToPage = () => {
+    const pageNum = parseInt(jumpPage);
+    if (pageNum && pageNum > 0 && pageNum <= (pagination.totalPages || 1)) {
+      handlePageChange(pageNum);
+      setJumpPage('');
+    }
+  };
+
+  // 处理回车键跳转
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleJumpToPage();
+    }
   };
 
   // 播放指定视频
@@ -142,10 +160,6 @@ export default function VideoPlayer() {
     const prevIndex = (currentIndex - 1 + videos.length) % videos.length;
     setCurrentVideo(videos[prevIndex]);
   };
-
-  // 计算分页按钮状态 - 修复逻辑
-  const canGoPrev = pagination.currentPage > 1;
-  const canGoNext = pagination.hasMore;
 
   return (
     <>
@@ -231,7 +245,7 @@ export default function VideoPlayer() {
             B站视频播放器
           </h1>
 
-          {/* 分页控制 - 修复按钮状态 */}
+          {/* 分页控制 - 移除禁用状态，添加跳转功能 */}
           <div style={{
             backgroundColor: 'white',
             padding: '20px',
@@ -265,30 +279,30 @@ export default function VideoPlayer() {
               </select>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
               <button
                 onClick={() => handlePageChange(pagination.currentPage - 1)}
-                disabled={!canGoPrev || loading}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: canGoPrev && !loading ? '#00a1d6' : '#e0e0e0',
+                  backgroundColor: '#00a1d6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  cursor: canGoPrev && !loading ? 'pointer' : 'not-allowed',
+                  cursor: 'pointer',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   transition: 'all 0.2s ease',
-                  minWidth: '80px'
+                  minWidth: '80px',
+                  opacity: loading ? 0.7 : 1
                 }}
                 onMouseEnter={(e) => {
-                  if (canGoPrev && !loading) {
+                  if (!loading) {
                     e.currentTarget.style.backgroundColor = '#008fb3';
                     e.currentTarget.style.transform = 'translateY(-1px)';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (canGoPrev && !loading) {
+                  if (!loading) {
                     e.currentTarget.style.backgroundColor = '#00a1d6';
                     e.currentTarget.style.transform = 'translateY(0)';
                   }
@@ -308,27 +322,27 @@ export default function VideoPlayer() {
 
               <button
                 onClick={() => handlePageChange(pagination.currentPage + 1)}
-                disabled={!canGoNext || loading}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: canGoNext && !loading ? '#00a1d6' : '#e0e0e0',
+                  backgroundColor: '#00a1d6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  cursor: canGoNext && !loading ? 'pointer' : 'not-allowed',
+                  cursor: 'pointer',
                   fontWeight: 'bold',
                   fontSize: '14px',
                   transition: 'all 0.2s ease',
-                  minWidth: '80px'
+                  minWidth: '80px',
+                  opacity: loading ? 0.7 : 1
                 }}
                 onMouseEnter={(e) => {
-                  if (canGoNext && !loading) {
+                  if (!loading) {
                     e.currentTarget.style.backgroundColor = '#008fb3';
                     e.currentTarget.style.transform = 'translateY(-1px)';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (canGoNext && !loading) {
+                  if (!loading) {
                     e.currentTarget.style.backgroundColor = '#00a1d6';
                     e.currentTarget.style.transform = 'translateY(0)';
                   }
@@ -336,6 +350,50 @@ export default function VideoPlayer() {
               >
                 {loading ? '...' : '下一页'}
               </button>
+
+              {/* 页面跳转输入框 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '14px', fontWeight: '500' }}>跳转至:</span>
+                <input
+                  ref={jumpInputRef}
+                  type="number"
+                  value={jumpPage}
+                  onChange={(e) => setJumpPage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="页码"
+                  min="1"
+                  max={pagination.totalPages || 1}
+                  style={{
+                    width: '80px',
+                    padding: '8px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    textAlign: 'center'
+                  }}
+                />
+                <button
+                  onClick={handleJumpToPage}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#218838';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#28a745';
+                  }}
+                >
+                  跳转
+                </button>
+              </div>
             </div>
 
             <div style={{ fontWeight: 'bold', color: '#666' }}>
@@ -355,6 +413,36 @@ export default function VideoPlayer() {
               fontWeight: '500'
             }}>
               {error}
+            </div>
+          )}
+
+          {/* 加载状态提示 */}
+          {loading && (
+            <div style={{
+              padding: '10px',
+              backgroundColor: '#e6f7ff',
+              border: '1px solid #b3e0ff',
+              borderRadius: '6px',
+              marginBottom: '20px',
+              textAlign: 'center',
+              color: '#0066cc',
+              fontWeight: '500'
+            }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid #f3f3f3',
+                  borderTop: '2px solid #00a1d6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                正在加载第 {pagination.currentPage} 页...
+              </div>
             </div>
           )}
 
@@ -736,6 +824,7 @@ export default function VideoPlayer() {
               <li>视频播放结束后会自动播放下一个</li>
               <li>可以使用"上一个"/"下一个"按钮手动切换</li>
               <li>显示当前视频的BV号和原始链接</li>
+              <li>新增页面跳转功能，可直接输入页码跳转</li>
             </ul>
           </div>
         </div>

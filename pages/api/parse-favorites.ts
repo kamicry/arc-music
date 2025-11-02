@@ -15,7 +15,33 @@ interface ParseResponse {
   error?: string;
 }
 
-// 获取收藏夹视频列表的函数
+// 解析接口返回的数据结构
+interface ParseApiResponse {
+  code: number;
+  msg: string;
+  data: {
+    title: string;
+    video: string;
+    cover?: string;
+    desc?: string;
+    publish_time?: string;
+    origin?: {
+      title: string;
+      duration: number;
+      duration_format: string;
+      cover: string;
+      accept: string[];
+      video_url: string;
+    };
+  };
+  author?: {
+    name: string;
+    avatar: string;
+  };
+  type?: string;
+}
+
+// 获取收藏夹视频列表的函数（保持不变）
 async function getPlaylistBVIds(mediaId: string): Promise<string[]> {
   const bvids: string[] = [];
   let page = 1;
@@ -70,7 +96,7 @@ async function getPlaylistBVIds(mediaId: string): Promise<string[]> {
   return bvids;
 }
 
-// 解析单个视频信息的函数
+// 更新后的解析单个视频信息的函数
 async function parseVideoInfo(bv: string): Promise<VideoInfo | null> {
   try {
     const parseUrl = `https://api.yuafeng.cn/API/ly/bilibili_jx.php?url=https://www.bilibili.com/video/${bv}`;
@@ -88,18 +114,17 @@ async function parseVideoInfo(bv: string): Promise<VideoInfo | null> {
       throw new Error(`解析接口请求失败: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data: ParseApiResponse = await response.json();
     
-    // 根据解析接口的实际返回结构调整
-    // 假设返回结构为 { title: "视频标题", video: "视频地址" }
-    if (data.title && data.video) {
+    // 根据你提供的JSON结构提取title和video
+    if (data.code === 0 && data.data && data.data.title && data.data.video) {
       return {
         bv,
-        title: data.title,
-        video: data.video
+        title: data.data.title,
+        video: data.data.video
       };
     } else {
-      console.warn(`视频 ${bv} 解析结果缺少必要字段:`, data);
+      console.warn(`视频 ${bv} 解析失败:`, data.msg);
       return null;
     }
     
@@ -109,6 +134,7 @@ async function parseVideoInfo(bv: string): Promise<VideoInfo | null> {
   }
 }
 
+// 主处理函数保持不变
 export default async function handler(req: NextApiRequest, res: NextApiResponse<ParseResponse>) {
   // 设置CORS头
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -146,10 +172,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
     console.log(`共获取到 ${bvids.length} 个视频，开始解析...`);
 
-    // 2. 并发解析所有视频信息（限制并发数避免被封）
+    // 2. 并发解析所有视频信息
     const videos: VideoInfo[] = [];
-    const batchSize = 3; // 每次并发解析3个视频
-    const delay = 1000; // 每次批次间隔1秒
+    const batchSize = 3;
+    const delay = 1000;
 
     for (let i = 0; i < bvids.length; i += batchSize) {
       const batch = bvids.slice(i, i + batchSize);
@@ -158,13 +184,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
       const batchPromises = batch.map(bv => parseVideoInfo(bv));
       const batchResults = await Promise.all(batchPromises);
       
-      // 过滤掉解析失败的结果
       const validResults = batchResults.filter((result): result is VideoInfo => result !== null);
       videos.push(...validResults);
       
       console.log(`批次 ${Math.floor(i / batchSize) + 1} 完成，有效结果: ${validResults.length}`);
       
-      // 如果不是最后一批，等待一段时间
       if (i + batchSize < bvids.length) {
         await new Promise(resolve => setTimeout(resolve, delay));
       }

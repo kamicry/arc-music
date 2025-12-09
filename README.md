@@ -3,7 +3,8 @@
 > 现版本为使用GDstudio的api版，如需使用本地音乐版请访问https://github.com/armjukl/arc-music/tree/local
 > 目前GDstudio限制同一ip每5分钟50次请求
 
-* 体验网站：https://music-player-rosy-nine.vercel.app/
+* 体验网站（部署在vercel）：https://music-player-rosy-nine.vercel.app/
+
   
 一个基于Nextjs的网页音乐播放器，接入GDstudio的api，提供流畅的音乐播放体验。
 * pc端:
@@ -46,7 +47,7 @@ cd arc-music
 ```
  backgroundImage: "url('/bg/3.jpeg')"
 ```
-
+* 更改首页歌单（待更新）
 
 3. **修改好启动后**
 ```bash

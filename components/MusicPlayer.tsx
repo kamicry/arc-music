@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Howl } from 'howler';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search, MoreVertical } from 'lucide-react';
 import { LOCAL_TRACKS, LocalTrack, MusicSource } from '../data/localTracks';
+import { checkBrowserCompatibility, createSearchParams } from '../utils/polyfills';
 
 const MUSIC_API_BASE = 'https://music-api.gdstudio.xyz/api.php';
 const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
@@ -84,16 +85,16 @@ function parseLyricLines(lyric: string | null | undefined): LyricLine[] {
 
     if (matches.length === 0) {
       if (text.length > 0) {
-        result.push({ time: Number.POSITIVE_INFINITY, text });
+        result.push({ time: Infinity, text });
       }
       continue;
     }
 
     for (const match of matches) {
-      const minutes = Number.parseInt(match[1] ?? '0', 10);
-      const seconds = Number.parseInt(match[2] ?? '0', 10);
-      const millisRaw = match[3] ?? '0';
-      const millis = Number.parseInt(millisRaw.padEnd(3, '0').slice(0, 3), 10);
+      const minutes = Number.parseInt((match[1] !== undefined) ? match[1] : '0', 10);
+      const seconds = Number.parseInt((match[2] !== undefined) ? match[2] : '0', 10);
+      const millisRaw = (match[3] !== undefined) ? match[3] : '0';
+      const millis = Number.parseInt((millisRaw + '000').slice(0, 3), 10);
       const totalSeconds = minutes * 60 + seconds + millis / 1000;
       if (text.length > 0) {
         result.push({ time: totalSeconds, text });
@@ -181,6 +182,14 @@ function selectBestSearchResult(results: SearchApiItem[], target: Track): Search
 }
 
 const MusicPlayer = () => {
+  // Browser compatibility check
+  useEffect(() => {
+    const compat = checkBrowserCompatibility();
+    if (!compat.isCompatible) {
+      console.warn('Browser compatibility issues:', compat.issues);
+    }
+  }, []);
+
   // 播放器状态
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -227,13 +236,13 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
   const currentSong = currentSongIndex >= 0 ? musicList[currentSongIndex] : undefined;
 
   useEffect(() => {
-    setCoverUrl(currentSong?.cover ?? null);
-  }, [currentSong?.cover]);
+    setCoverUrl((currentSong && currentSong.cover) ? currentSong.cover : null);
+  }, [currentSong ? currentSong.cover : null]);
 
   useEffect(() => {
     setShowTranslation(false);
     setLyricsExpanded(false);
-  }, [currentSong?.id]);
+  }, [currentSong ? currentSong.id : null]);
 
   useEffect(() => {
     if (!mobileExpanded) {
@@ -241,8 +250,8 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
     }
   }, [mobileExpanded]);
 
-  const originalLyricLines = useMemo(() => parseLyricLines(currentSong?.lyric), [currentSong?.lyric]);
-  const translationLyricLines = useMemo(() => parseLyricLines(currentSong?.tLyric), [currentSong?.tLyric]);
+  const originalLyricLines = useMemo(() => parseLyricLines(currentSong ? currentSong.lyric : undefined), [currentSong ? currentSong.lyric : undefined]);
+  const translationLyricLines = useMemo(() => parseLyricLines(currentSong ? currentSong.tLyric : undefined), [currentSong ? currentSong.tLyric : undefined]);
   const displayLyricLines = useMemo<LyricLine[]>(() => {
     const hasTranslation = translationLyricLines.length > 0;
     const hasOriginal = originalLyricLines.length > 0;
@@ -286,8 +295,9 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
     if (activeLyricIndex < 0 || activeLyricIndex >= displayLyricLines.length) return null;
     const entry = displayLyricLines[activeLyricIndex];
     const timeKey = Number.isFinite(entry.time) ? entry.time.toFixed(3) : `idx-${activeLyricIndex}`;
-    return `${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${timeKey}`;
-  }, [activeLyricIndex, currentSong?.id, displayLyricLines, showTranslation]);
+    const songId = currentSong ? currentSong.id : 'unknown';
+    return `${songId}-${showTranslation ? 'trans' : 'orig'}-${timeKey}`;
+  }, [activeLyricIndex, currentSong ? currentSong.id : null, displayLyricLines, showTranslation]);
 
   const previewLyricLines = useMemo(() => {
     if (displayLyricLines.length === 0) return [] as { index: number; line: LyricLine }[];
@@ -337,7 +347,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
 
   const callMusicApi = useCallback(async <T,>(params: Record<string, string>): Promise<T> => {
     registerRequest();
-    const url = `${MUSIC_API_BASE}?${new URLSearchParams(params).toString()}`;
+    const url = `${MUSIC_API_BASE}?${createSearchParams(params)}`;
     const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('音乐服务暂时不可用');
@@ -454,7 +464,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       }
     }
 
-    const fileSizeKb = typeof urlData.size === 'number' ? urlData.size : track.fileSizeKb ?? null;
+    const fileSizeKb = typeof urlData.size === 'number' ? urlData.size : (track.fileSizeKb != null ? track.fileSizeKb : null);
 
     const resolvedTrack: Track = {
       ...track,
@@ -520,7 +530,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       setCurrentTime(0);
       setDuration(0);
       setCurrentSongIndex(index);
-      setCoverUrl(resolvedTrack.cover ?? null);
+      setCoverUrl(resolvedTrack.cover != null ? resolvedTrack.cover : null);
     } catch (err: unknown) {
       if (playRequestIdRef.current === requestId) {
         const message = err instanceof Error ? err.message : '播放失败，请稍后重试';
@@ -613,6 +623,8 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       src: [currentSong.url],
       html5: true,
       volume: volume,
+      preload: true,
+      format: ['mp3', 'aac', 'm4a'],
       onplay: () => {
         setIsPlaying(true);
         startProgressTimer();
@@ -632,7 +644,21 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
         playNext();
       },
       onload: () => {
-        setDuration(howl.duration());
+        const dur = howl.duration();
+        if (dur && isFinite(dur)) {
+          setDuration(dur);
+        }
+      },
+      onloaderror: (id, err) => {
+        console.error('Howl load error:', err);
+        const message = err ? String(err) : '音频加载失败';
+        setErrorMessage(message);
+      },
+      onplayerror: (id, err) => {
+        console.error('Howl play error:', err);
+        const message = err ? String(err) : '播放失败';
+        setErrorMessage(message);
+        setIsPlaying(false);
       },
     });
 
@@ -641,8 +667,8 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
     if (autoPlayRef.current) {
       try {
         howl.play();
-      } catch {
-        // ignore
+      } catch (err) {
+        console.error('Auto-play failed:', err);
       } finally {
         autoPlayRef.current = false;
       }
@@ -655,7 +681,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       }
       stopProgressTimer();
     };
-  }, [currentSong?.url]);
+  }, [currentSong ? currentSong.url : null]);
 
   // 更新音量
   useEffect(() => {
@@ -873,7 +899,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
     setInfoModalTrack({ ...track });
 
     try {
-      const desiredBitrate = (track.bitrate ?? selectedBitrate) as BitrateOption;
+      const desiredBitrate = (track.bitrate != null ? track.bitrate : selectedBitrate) as BitrateOption;
       const resolved = await ensureTrackResolved({ ...track, bitrate: desiredBitrate }, desiredBitrate);
       if (infoRequestIdRef.current !== requestId) {
         return;
@@ -993,7 +1019,8 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
       740: '740K 无损音质',
       999: '999K 无损音质',
     };
-    return map[value] ?? `${value}K`;
+    const label = map[value];
+    return label != null ? label : `${value}K`;
   };
 
   const coverNodeSmall = (
@@ -1030,20 +1057,23 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
 
   const infoTrack = infoModalTrack;
   const infoSourceLabel = infoTrack
-    ? AVAILABLE_SOURCES.find((item) => item.value === infoTrack.source)?.label ?? infoTrack.source
+    ? (function() {
+        const sourceItem = AVAILABLE_SOURCES.find((item) => item.value === infoTrack.source);
+        return sourceItem ? sourceItem.label : infoTrack.source;
+      }())
     : '';
-  const lyricLink = infoTrack && (infoTrack.lyricId ?? infoTrack.trackId)
-    ? `${MUSIC_API_BASE}?types=lyric&source=${infoTrack.source}&id=${infoTrack.lyricId ?? infoTrack.trackId}`
+  const lyricLink = infoTrack && (infoTrack.lyricId != null ? infoTrack.lyricId : infoTrack.trackId)
+    ? `${MUSIC_API_BASE}?types=lyric&source=${infoTrack.source}&id=${infoTrack.lyricId != null ? infoTrack.lyricId : infoTrack.trackId}`
     : null;
-  const coverLink = infoTrack?.cover
+  const coverLink = infoTrack && infoTrack.cover
     ? infoTrack.cover
-    : infoTrack?.picId
+    : infoTrack && infoTrack.picId
     ? `${MUSIC_API_BASE}?types=pic&source=${infoTrack.source}&id=${infoTrack.picId}&size=${DEFAULT_COVER_SIZE}`
     : null;
-  const audioLink = infoTrack?.url ?? null;
-  const fileSizeLabel = formatFileSizeLabel(infoTrack?.fileSizeKb);
-  const bitrateLabel = formatBitrateLabel(infoTrack?.bitrate);
-  const durationLabel = infoTrack?.duration && infoTrack.duration.trim() ? infoTrack.duration : '未知';
+  const audioLink = infoTrack ? infoTrack.url : null;
+  const fileSizeLabel = formatFileSizeLabel(infoTrack ? infoTrack.fileSizeKb : null);
+  const bitrateLabel = formatBitrateLabel(infoTrack ? infoTrack.bitrate : null);
+  const durationLabel = infoTrack && infoTrack.duration && infoTrack.duration.trim() ? infoTrack.duration : '未知';
 
   return (
     <div className="relative min-h-screen text-slate-800">
@@ -1329,21 +1359,21 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
                         className="flex-1 min-h-[8rem] overflow-y-auto max-h-[calc(100vh-22rem)] md:max-h-[calc(100vh-20rem)] custom-scrollbar bg-white/70 border border-slate-200 rounded-xl p-4"
                       >
                         {displayLyricLines.length > 0 ? (
-                          displayLyricLines.map((line, idx) => {
-                            const isActive = idx === activeLyricIndex;
-                            const key = `lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`;
-                            return (
-                              <p
-                                key={key}
-                                data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
-                                className={`leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-bold text-lg' : 'text-slate-700 text-base'}`}
-                              >
-                                {line.text}
-                              </p>
-                            );
-                          })
+                         displayLyricLines.map((line, idx) => {
+                           const isActive = idx === activeLyricIndex;
+                           const key = `lyric-desktop-${showTranslation ? 'trans' : 'orig'}-${idx}`;
+                           return (
+                             <p
+                               key={key}
+                               data-lyric-key={`${currentSong ? currentSong.id : 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
+                               className={`leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-bold text-lg' : 'text-slate-700 text-base'}`}
+                             >
+                               {line.text}
+                             </p>
+                           );
+                         })
                         ) : (
-                          <p className="text-sm text-slate-500">暂无歌词</p>
+                         <p className="text-sm text-slate-500">暂无歌词</p>
                         )}
                       </div>
                     ) : (
@@ -1441,8 +1471,8 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
           <div className="flex items-center flex-1 min-w-0" onClick={() => setMobileExpanded(true)}>
             {coverNodeSmall}
             <div className="min-w-0">
-              <p className="font-semibold text-slate-900 truncate">{currentSong?.name ?? '未选择'}</p>
-              <p className="text-sm text-slate-600 truncate">{currentSong?.artist ?? ''}</p>
+              <p className="font-semibold text-slate-900 truncate">{currentSong ? currentSong.name : '未选择'}</p>
+              <p className="text-sm text-slate-600 truncate">{currentSong ? currentSong.artist : ''}</p>
             </div>
           </div>
           <div className="flex items-center space-x-2 pl-3">
@@ -1467,8 +1497,8 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
             <div className="flex items-center">
               {coverNodeSmall}
               <div>
-                <p className="font-bold text-lg text-slate-900">{currentSong?.name ?? '未选择'}</p>
-                <p className="text-slate-600">{currentSong?.artist ?? ''}</p>
+                <p className="font-bold text-lg text-slate-900">{currentSong ? currentSong.name : '未选择'}</p>
+                <p className="text-slate-600">{currentSong ? currentSong.artist : ''}</p>
               </div>
             </div>
             <div className="flex items-center space-x-2 text-slate-600">
@@ -1483,9 +1513,9 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
                 <MoreVertical size={20} />
               </button>
               <button
-                onClick={() => { if (currentSong?.url) { window.open(currentSong.url, '_blank'); } }}
+                onClick={() => { if (currentSong && currentSong.url) { window.open(currentSong.url, '_blank'); } }}
                 className="p-2 hover:text-slate-800 transition-colors disabled:opacity-50"
-                disabled={!currentSong?.url}
+                disabled={!currentSong || !currentSong.url}
               >
                 <Share size={20} />
               </button>
@@ -1531,7 +1561,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
                           return (
                             <p
                               key={key}
-                              data-lyric-key={`${currentSong?.id ?? 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
+                              data-lyric-key={`${currentSong ? currentSong.id : 'unknown'}-${showTranslation ? 'trans' : 'orig'}-${Number.isFinite(line.time) ? line.time.toFixed(3) : `idx-${idx}`}`}
                               className={`leading-relaxed transition-colors ${isActive ? 'text-sky-600 font-bold text-base' : 'text-slate-700 text-sm'}`}
                             >
                               {line.text}
@@ -1674,7 +1704,7 @@ const [infoModalError, setInfoModalError] = useState<string | null>(null);
                 <p>专辑：{infoTrack.album || '未知'}</p>
                 <p>时长：{durationLabel}</p>
                 <p>来源：{infoSourceLabel}{infoSourceLabel && infoSourceLabel !== infoTrack.source ? `（${infoTrack.source}）` : ''}</p>
-                <p>歌曲ID：{infoTrack.trackId ?? '未知'}</p>
+                <p>歌曲ID：{infoTrack.trackId != null ? infoTrack.trackId : '未知'}</p>
                 <p>文件大小：{fileSizeLabel}</p>
                 <p>播放音质：{bitrateLabel}</p>
                 <div className="space-y-1">

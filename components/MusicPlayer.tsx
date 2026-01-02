@@ -4,6 +4,131 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Howl } from 'howler';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Heart, Share, Repeat, Shuffle, Repeat1, ChevronUp, ChevronDown, Search } from 'lucide-react';
 
+// Browser compatibility utilities
+const isSafari12 = () => {
+  const ua = navigator.userAgent;
+  const match = ua.match(/Version\/(\d+\.\d+).*Safari/);
+  if (!match) return false;
+  const version = parseFloat(match[1]);
+  return version >= 12 && version < 13;
+};
+
+// Polyfill checks for Safari 12
+const checkBrowserCompatibility = () => {
+  const issues: string[] = [];
+
+  // Check fetch API
+  if (typeof fetch === 'undefined') {
+    issues.push('Fetch API not available');
+  }
+
+  // Check Promise
+  if (typeof Promise === 'undefined') {
+    issues.push('Promise not available');
+  }
+
+  // Check Uint8Array
+  if (typeof Uint8Array === 'undefined') {
+    issues.push('Uint8Array not available');
+  }
+
+  // Check ArrayBuffer
+  if (typeof ArrayBuffer === 'undefined') {
+    issues.push('ArrayBuffer not available');
+  }
+
+  // Check Blob
+  if (typeof Blob === 'undefined') {
+    issues.push('Blob not available');
+  }
+
+  // Check URL API
+  if (typeof URL === 'undefined') {
+    issues.push('URL API not available');
+  }
+
+  // Check TextDecoder availability
+  if (typeof TextDecoder === 'undefined') {
+    console.warn('TextDecoder not available, using fallback');
+  }
+
+  if (issues.length > 0) {
+    console.error('Browser compatibility issues:', issues);
+    console.log('Browser:', navigator.userAgent);
+  }
+
+  if (isSafari12()) {
+    console.log('Safari 12 detected - compatibility mode enabled');
+  }
+
+  return issues.length === 0;
+};
+
+const safeTextDecode = (bytes: Uint8Array, fallbackEncoding: string = 'utf-8'): string => {
+  try {
+    if (typeof TextDecoder !== 'undefined') {
+      // Try TextDecoder first (modern browsers)
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      return decoder.decode(bytes);
+    }
+    // Fallback for older browsers
+    let result = '';
+    for (let i = 0; i < bytes.length; i++) {
+      const byte = bytes[i];
+      if (byte < 0x80) {
+        result += String.fromCharCode(byte);
+      } else if (byte < 0xC0) {
+        // Invalid continuation byte, skip
+        continue;
+      } else if (byte < 0xE0) {
+        if (i + 1 >= bytes.length) break;
+        const b1 = bytes[i + 1];
+        if ((b1 & 0xC0) === 0x80) {
+          result += String.fromCharCode(((byte & 0x1F) << 6) | (b1 & 0x3F));
+          i += 1;
+        }
+      } else if (byte < 0xF0) {
+        if (i + 2 >= bytes.length) break;
+        const b1 = bytes[i + 1];
+        const b2 = bytes[i + 2];
+        if ((b1 & 0xC0) === 0x80 && (b2 & 0xC0) === 0x80) {
+          result += String.fromCharCode(((byte & 0x0F) << 12) | ((b1 & 0x3F) << 6) | (b2 & 0x3F));
+          i += 2;
+        }
+      }
+    }
+    return result;
+  } catch (e) {
+    console.warn('Text decode error:', e);
+    return '';
+  }
+};
+
+// Safe URL.createObjectURL wrapper
+const safeCreateObjectURL = (blob: Blob): string | null => {
+  try {
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      return URL.createObjectURL(blob);
+    }
+    console.warn('URL.createObjectURL not available');
+    return null;
+  } catch (e) {
+    console.warn('createObjectURL error:', e);
+    return null;
+  }
+};
+
+// Safe URL.revokeObjectURL wrapper
+const safeRevokeObjectURL = (url: string) => {
+  try {
+    if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(url);
+    }
+  } catch (e) {
+    console.warn('revokeObjectURL error:', e);
+  }
+};
+
 // 音乐数据从服务器获取
 export type Track = {
   id: number;
@@ -41,18 +166,27 @@ const MusicPlayer = () => {
 
   const currentSong = musicList[currentSongIndex];
 
+  // Check browser compatibility on mount
+  useEffect(() => {
+    checkBrowserCompatibility();
+  }, []);
+
   // 加载服务器音乐列表
   useEffect(() => {
     const load = async () => {
       try {
         const res = await fetch('/api/music');
-        if (!res.ok) return;
+        if (!res.ok) {
+          console.error('Failed to load music list:', res.status, res.statusText);
+          return;
+        }
         const data: Track[] = await res.json();
         setAllTracks(data);
         setMusicList(data);
         setCurrentSongIndex(-1);
       } catch (e) {
-        // ignore
+        console.error('Music list load error:', e);
+        // Don't silently fail - log for debugging
       }
     };
     load();
@@ -67,10 +201,13 @@ const MusicPlayer = () => {
       soundRef.current = null;
     }
 
+    // Safari 12 compatible audio configuration
     const howl = new Howl({
       src: [currentSong.url],
-      html5: true,
+      html5: true, // Force HTML5 Audio API which is better supported in Safari 12
       volume: volume,
+      format: ['mp3', 'mp4', 'wav', 'ogg', 'aac'], // Try multiple formats
+      preload: 'metadata', // Safari 12 prefers metadata preloading
       onplay: () => {
         setIsPlaying(true);
         startProgressTimer();
@@ -84,13 +221,40 @@ const MusicPlayer = () => {
           try {
             howl.seek(0);
             howl.play();
-          } catch {}
+          } catch (e) {
+            console.warn('Single replay error:', e);
+          }
           return;
         }
         playNext();
       },
       onload: () => {
-        setDuration(howl.duration());
+        try {
+          const dur = howl.duration();
+          if (dur && isFinite(dur)) {
+            setDuration(dur);
+          }
+        } catch (e) {
+          console.warn('Duration load error:', e);
+        }
+      },
+      onloaderror: (id, error) => {
+        console.error('Audio load error:', id, error);
+        // For Safari 12, try fallback: reload without html5
+        if (isSafari12()) {
+          console.log('Safari 12 detected, trying fallback...');
+          setTimeout(() => {
+            try {
+              howl.unload();
+              howl.play();
+            } catch (e) {
+              console.warn('Fallback play failed:', e);
+            }
+          }, 100);
+        }
+      },
+      onplayerror: (id, error) => {
+        console.error('Audio play error:', id, error);
       },
     });
 
@@ -98,17 +262,34 @@ const MusicPlayer = () => {
 
     if (autoPlayRef.current) {
       try {
-        howl.play();
-      } catch {
-        // ignore
-      } finally {
+        // Safari 12 may need a small delay before playing
+        if (isSafari12()) {
+          setTimeout(() => {
+            try {
+              howl.play();
+            } catch (e) {
+              console.warn('Delayed play failed:', e);
+            } finally {
+              autoPlayRef.current = false;
+            }
+          }, 50);
+        } else {
+          howl.play();
+          autoPlayRef.current = false;
+        }
+      } catch (e) {
+        console.warn('Autoplay error:', e);
         autoPlayRef.current = false;
       }
     }
 
     return () => {
       if (soundRef.current) {
-        soundRef.current.unload();
+        try {
+          soundRef.current.unload();
+        } catch (e) {
+          console.warn('Unload error:', e);
+        }
         soundRef.current = null;
       }
       stopProgressTimer();
@@ -137,64 +318,73 @@ const MusicPlayer = () => {
     latestCoverForUrlRef.current = url;
 
     const synchsafeToSize = (bytes: Uint8Array) => {
-      return (bytes[0] & 0x7f) * 0x200000 + (bytes[1] & 0x7f) * 0x4000 + (bytes[2] & 0x7f) * 0x80 + (bytes[3] & 0x7f);
+      try {
+        return (bytes[0] & 0x7f) * 0x200000 + (bytes[1] & 0x7f) * 0x4000 + (bytes[2] & 0x7f) * 0x80 + (bytes[3] & 0x7f);
+      } catch (e) {
+        console.warn('Synchsafe size error:', e);
+        return 0;
+      }
     };
 
-    const textDecoder = new TextDecoder('iso-8859-1');
+    const parseApic = (buf: ArrayBuffer): string | null => {
+      try {
+        const bytes = new Uint8Array(buf);
+        if (bytes.length < 10) return null;
+        if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
+        const ver = bytes[3];
+        const tagSize = synchsafeToSize(bytes.subarray(6, 10));
+        let offset = 10;
+        const end = 10 + tagSize;
 
-    const parseApic = (buf: ArrayBuffer) => {
-      const bytes = new Uint8Array(buf);
-      if (bytes.length < 10) return null as string | null;
-      if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return null;
-      const ver = bytes[3];
-      const tagSize = synchsafeToSize(bytes.subarray(6, 10));
-      let offset = 10;
-      const end = 10 + tagSize;
-      while (offset + 10 <= bytes.length && offset + 10 <= end) {
-        // frame header
-        const id = textDecoder.decode(bytes.subarray(offset, offset + 4));
-        let frameSize = 0;
-        if (ver === 4) {
-          frameSize = synchsafeToSize(bytes.subarray(offset + 4, offset + 8));
-        } else {
-          frameSize =
-            (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
-        }
-        const frameStart = offset + 10;
-        if (frameSize <= 0) break;
-        if (id === 'APIC') {
-          const enc = bytes[frameStart];
-          let i = frameStart + 1;
-          // MIME type (latin1, null-terminated)
-          let mimeEnd = i;
-          while (mimeEnd < frameStart + frameSize && bytes[mimeEnd] !== 0x00) mimeEnd++;
-          const mime = textDecoder.decode(bytes.subarray(i, mimeEnd)) || 'image/jpeg';
-          i = mimeEnd + 1;
-          // picture type
-          i += 1;
-          // description (encoding dependent, null-terminated)
-          if (enc === 0x00 || enc === 0x03) {
-            while (i < frameStart + frameSize && bytes[i] !== 0x00) i++;
-            i += 1;
-          } else if (enc === 0x01 || enc === 0x02) {
-            // UTF-16 with BOM or without; terminate with 0x00 0x00
-            while (i + 1 < frameStart + frameSize) {
-              if (bytes[i] === 0x00 && bytes[i + 1] === 0x00) {
-                i += 2;
-                break;
-              }
-              i += 2;
-            }
+        while (offset + 10 <= bytes.length && offset + 10 <= end) {
+          // frame header - use safe text decode
+          const id = safeTextDecode(bytes.subarray(offset, offset + 4));
+          let frameSize = 0;
+          if (ver === 4) {
+            frameSize = synchsafeToSize(bytes.subarray(offset + 4, offset + 8));
+          } else {
+            frameSize =
+              (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
           }
-          const imgStart = i;
-          const imgEnd = Math.min(frameStart + frameSize, bytes.length);
-          const imgBytes = bytes.subarray(imgStart, imgEnd);
-          const blob = new Blob([imgBytes], { type: mime });
-          return URL.createObjectURL(blob);
+          const frameStart = offset + 10;
+          if (frameSize <= 0 || frameSize > bytes.length - frameStart) break;
+          if (id === 'APIC') {
+            const enc = bytes[frameStart];
+            let i = frameStart + 1;
+            // MIME type (latin1, null-terminated)
+            let mimeEnd = i;
+            while (mimeEnd < frameStart + frameSize && bytes[mimeEnd] !== 0x00) mimeEnd++;
+            const mime = safeTextDecode(bytes.subarray(i, mimeEnd)) || 'image/jpeg';
+            i = mimeEnd + 1;
+            // picture type
+            i += 1;
+            // description (encoding dependent, null-terminated)
+            if (enc === 0x00 || enc === 0x03) {
+              while (i < frameStart + frameSize && bytes[i] !== 0x00) i++;
+              i += 1;
+            } else if (enc === 0x01 || enc === 0x02) {
+              // UTF-16 with BOM or without; terminate with 0x00 0x00
+              while (i + 1 < frameStart + frameSize) {
+                if (bytes[i] === 0x00 && bytes[i + 1] === 0x00) {
+                  i += 2;
+                  break;
+                }
+                i += 2;
+              }
+            }
+            const imgStart = i;
+            const imgEnd = Math.min(frameStart + frameSize, bytes.length);
+            const imgBytes = bytes.subarray(imgStart, imgEnd);
+            const blob = new Blob([imgBytes], { type: mime });
+            return safeCreateObjectURL(blob);
+          }
+          offset = frameStart + frameSize;
         }
-        offset = frameStart + frameSize;
+        return null;
+      } catch (e) {
+        console.warn('ID3 parse error:', e);
+        return null;
       }
-      return null as string | null;
     };
 
     const fetchCover = async () => {
@@ -213,30 +403,19 @@ const MusicPlayer = () => {
           if (!aborted && latestCoverForUrlRef.current === url) {
             if (cover && cover.startsWith('blob:')) {
               if (coverObjectUrlRef.current && coverObjectUrlRef.current !== cover) {
-                try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
+                safeRevokeObjectURL(coverObjectUrlRef.current);
               }
               coverObjectUrlRef.current = cover;
             }
             setCoverUrl(cover);
           }
         } else {
-          // Not ID3v2, try a larger chunk
-          const resp = await fetch(url, { cache: 'no-store' });
-          const buf = await resp.arrayBuffer();
-          if (aborted) return;
-          const cover = parseApic(buf);
-          if (!aborted && latestCoverForUrlRef.current === url) {
-            if (cover && cover.startsWith('blob:')) {
-              if (coverObjectUrlRef.current && coverObjectUrlRef.current !== cover) {
-                try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
-              }
-              coverObjectUrlRef.current = cover;
-            }
-            setCoverUrl(cover);
-          }
+          // Not ID3v2, skip parsing to avoid issues in Safari 12
+          console.log('No ID3v2 tag found, using default cover');
         }
-      } catch {
-        // ignore
+      } catch (e) {
+        // Silent fail for cover extraction - not critical for playback
+        console.warn('Cover fetch error:', e);
       }
     };
 
@@ -246,7 +425,7 @@ const MusicPlayer = () => {
     return () => {
       aborted = true;
       if (coverObjectUrlRef.current) {
-        try { URL.revokeObjectURL(coverObjectUrlRef.current); } catch {}
+        safeRevokeObjectURL(coverObjectUrlRef.current);
         coverObjectUrlRef.current = null;
       }
     };
@@ -282,10 +461,33 @@ const MusicPlayer = () => {
   const togglePlayPause = () => {
     if (!soundRef.current) return;
 
-    if (isPlaying) {
-      soundRef.current.pause();
-    } else {
-      soundRef.current.play();
+    try {
+      if (isPlaying) {
+        soundRef.current.pause();
+      } else {
+        // Safari 12 may need user interaction to resume audio context
+        if (isSafari12() && typeof window !== 'undefined' && (window as any).AudioContext) {
+          // Try to access and resume audio context if available
+          try {
+            const audioCtx = (soundRef.current as any)._audioContext;
+            if (audioCtx && audioCtx.state === 'suspended') {
+              audioCtx.resume().catch(() => {
+                // Ignore resume errors
+              });
+            }
+          } catch (e) {
+            // Audio context access failed, continue with play()
+            console.debug('Audio context access failed:', e);
+          }
+        }
+        soundRef.current.play();
+      }
+    } catch (e) {
+      console.error('Toggle play/pause error:', e);
+      // Try to recover by reloading the track
+      if (currentSong) {
+        playSong(currentSongIndex);
+      }
     }
   };
 
@@ -377,19 +579,24 @@ const MusicPlayer = () => {
     const s = soundRef.current;
     if (!s) return;
 
-    const progressBar = e.currentTarget;
-    const rect = progressBar.getBoundingClientRect();
-    let clickPosition = (e.clientX - rect.left) / rect.width;
-    if (isNaN(clickPosition)) clickPosition = 0;
-    clickPosition = Math.max(0, Math.min(1, clickPosition));
+    try {
+      const progressBar = e.currentTarget;
+      const rect = progressBar.getBoundingClientRect();
+      let clickPosition = (e.clientX - rect.left) / rect.width;
+      if (isNaN(clickPosition) || !isFinite(clickPosition)) clickPosition = 0;
+      clickPosition = Math.max(0, Math.min(1, clickPosition));
 
-    const dur = s.duration();
-    const baseDur = dur && isFinite(dur) && dur > 0 ? dur : duration || 0;
-    const newTime = clickPosition * baseDur;
+      const dur = s.duration();
+      const baseDur = dur && isFinite(dur) && dur > 0 ? dur : duration || 0;
+      const newTime = clickPosition * baseDur;
 
-    s.seek(newTime);
-    setCurrentTime(newTime);
-    setProgress(clickPosition * 100);
+      // Safari 12: Seek may fail if audio is not ready
+      s.seek(newTime);
+      setCurrentTime(newTime);
+      setProgress(clickPosition * 100);
+    } catch (error) {
+      console.error('Progress click error:', error);
+    }
   };
 
   // 格式化时间
